@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local raw downloads (regenerable; catalog + traces are vendored elsewhere)
+data_raw/
+
+# Built retrieval artifacts (rebuilt by `make build` / Docker build)
+artifacts/embeddings.npy
+artifacts/bm25.pkl
+
+# Env / OS
+.env
+.DS_Store
