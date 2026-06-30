@@ -19,9 +19,10 @@ POST /chat ──► FastAPI (strict schema, never-500) ──► LangGraph agen
 
 - **Reliability-first.** Every response is schema-valid; request-validation errors,
   agent exceptions, and timeouts all degrade to a valid 200 (no 4xx/5xx ever).
-- **Works without an LLM.** The Groq LLM is an *enhancement*. With no API key the
-  agent still clarifies, recommends, refines, compares, and refuses — fully
-  deterministically. The LLM lifts retrieval-query quality and intent precision.
+- **Deterministic by default.** The agent clarifies, recommends, refines, compares, and
+  refuses fully deterministically — no LLM required. On the public traces this measured
+  *higher* Recall@10 (0.510) than the LLM route, at ~0.04s/turn. The Groq LLM is an
+  opt-in enhancement (`ENABLE_LLM=true`) for scope/routing robustness.
 - **Hard constraints are inviolable.** Duration caps / required languages / required
   types filter; soft preferences only re-rank. The shortlist returns <10 rather than
   relax a hard constraint.
@@ -70,8 +71,9 @@ pip install -r requirements.txt
 python -m app.data.ingest
 python -m app.data.build_index
 
-# (optional) enable the LLM path
+# (optional) enable the LLM routing path
 echo "GROQ_API_KEY=gsk_..." > .env
+echo "ENABLE_LLM=true" >> .env
 
 # Run
 uvicorn app.main:app --port 8000

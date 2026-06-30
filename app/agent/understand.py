@@ -33,10 +33,17 @@ _DONE = ("that's all", "thats all", "that is all", "we're done", "were done", "a
 _COMPARE = ("difference between", "compare", " vs ", " versus ", "differ")
 _REFINE = ("remove", "drop", "without", "instead", "replace", "add ", "also include",
            "swap", "take out", "exclude", "shorter", "make them", "keep only")
-_INJECTION = ("ignore previous", "ignore all previous", "disregard", "system prompt",
-              "you are now", "reveal your", "override")
-_OFFTOPIC = ("weather", "recipe", "stock price", "tell me a joke", "who won",
-             "write me a poem", "lawsuit", "is it legal", "sue ")
+_INJECTION = ("ignore previous", "ignore the above", "ignore all previous", "ignore your",
+              "disregard", "system prompt", "your instructions", "you are now", "act as if",
+              "pretend you", "jailbreak", "developer mode", "reveal your", "print your",
+              "forget your instructions", "override your", "repeat the words above")
+# Only unambiguous out-of-scope phrases. We bias HARD against false positives: refusing
+# a valid hiring query ("a salaried manager", "a basketball coach") is worse than missing
+# a novel off-topic phrasing, so bare ambiguous tokens are avoided.
+_OFFTOPIC = ("weather", "recipe", "tell me a joke", "write a poem", "write me a poem",
+             "who won the", "stock price", "capital of", "horoscope", "translate this",
+             "is it legal", "legal advice", "lawsuit", "how much should i pay",
+             "interview questions", "do my homework")
 
 
 def last_user(messages: list[dict]) -> str:

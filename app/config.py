@@ -71,6 +71,10 @@ FUZZY_THRESHOLD = int(_num("FUZZY_THRESHOLD", 85)) # rapidfuzz name-match cutoff
 INCLUDE_PREPACKAGED = _flag("INCLUDE_PREPACKAGED", False)
 
 # --- Feature flags (OFF until measured) ----------------------------------
+# LLM routing is OFF by default: on the public traces the deterministic core measured
+# HIGHER Recall@10 (0.510 vs ~0.35) with far lower latency, zero token cost, and 6/6
+# probes. The LLM stays one env var away (ENABLE_LLM=true) for scope/routing robustness.
+ENABLE_LLM = _flag("ENABLE_LLM", False)
 ENABLE_LLM_RERANK = _flag("ENABLE_LLM_RERANK", False)
 RERANK_POOL = int(_num("RERANK_POOL", 25))         # candidates fed to the reranker
 ENABLE_MMR = _flag("ENABLE_MMR", False)

@@ -24,9 +24,10 @@ Soft preferences only re-rank; if fewer than 10 pass the hard filters we return 
 No FAISS — a brute-force matrix multiply over ~370 vectors is exact and instant.
 
 ## Agent
-A 3-node LangGraph (`understand → act → respond`). `understand` is one Groq JSON call
-that routes intent and extracts cumulative constraints from the whole history;
-`act` is deterministic; replies are templated. Because the wire schema is fixed and the
+A 3-node LangGraph (`understand → act → respond`). `understand` routes intent and
+extracts cumulative constraints from the whole history — deterministically by default,
+or via one Groq JSON call when `ENABLE_LLM=true`; `act` is deterministic; replies are
+templated. Because the wire schema is fixed and the
 API is stateless, the **numbered list in the reply is the only cross-turn state** — each
 line prints its catalog URL, which I parse back to reconstruct the prior shortlist for
 refinements like "remove the second one". Clarification is capped at one (with a
@@ -72,11 +73,12 @@ inside the 30s cap.
   replay and pushed p95 latency to ~10s → switched routing to **`llama-3.1-8b-instant`**
   (separate, larger budget; faster) and slashed prompt tokens (compact transcript,
   trimmed system prompt, no retry on rate-limits).
-- **LLM query distillation** did not beat the deterministic broad query on the
-  multi-faceted, semantic traces (e.g. a "senior Rust" query whose gold items are
-  inferred), so retrieval uses the full conversation text; the LLM contributes routing,
-  constraint typing, and refinement, with the deterministic path as the measured floor
-  (replay Recall@10 ≈ 0.47–0.55).
+- **LLM routing under-performed and is OFF by default.** The deterministic broad-query
+  core scored **Recall@10 0.510** vs the 8B route's ~0.35 (LLM query *distillation* hurt
+  multi-faceted/semantic needs like "senior Rust", where gold items are inferred), at
+  ~0.04s/turn vs ~9s and with no token/network risk. So `ENABLE_LLM` defaults to false
+  (same measure-before-enable discipline as MMR/rerank); the LLM is one env var away for
+  scope/routing robustness, and any LLM failure already falls back to this same core.
 
 ## AI-tool usage
 Built with AI-assisted coding (Claude Code) for scaffolding, retrieval/agent plumbing,
@@ -85,5 +87,5 @@ state-in-reply, flags-off-until-measured, model choice) are documented in
 `docs/DECISIONS.md` and were driven by the measurements above.
 
 ## Stack
-Groq `llama-3.1-8b-instant` · `bge-small-en-v1.5` (local, baked) · BM25 · FastAPI +
-Pydantic v2 · LangGraph · rapidfuzz · NumPy · Hugging Face Spaces (Docker).
+`bge-small-en-v1.5` (local, baked) + BM25 retrieval · FastAPI + Pydantic v2 · LangGraph ·
+rapidfuzz · NumPy · Hugging Face Spaces (Docker) · Groq `llama-3.1-8b-instant` (opt-in).

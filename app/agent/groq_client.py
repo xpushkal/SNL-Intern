@@ -15,7 +15,8 @@ _client = None
 
 
 def available() -> bool:
-    return bool(config.GROQ_API_KEY)
+    """LLM is usable only when explicitly enabled AND a key is present."""
+    return config.ENABLE_LLM and bool(config.GROQ_API_KEY)
 
 
 def _get_client():

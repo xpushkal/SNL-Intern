@@ -16,10 +16,11 @@ Turn orchestrator (app/agent/turn.py) — defense-in-depth try/except
 LangGraph: understand → act → respond  (app/agent/graph.py)
    │
    ├─ understand (app/agent/understand.py)
-   │     one Groq JSON call over the WHOLE history → structured route
+   │     deterministic keyword router by default (vagueness-aware) →
    │     {in_scope, intent, search_query, hard, soft, compare_names,
    │      remove_names, add_query, clarifying_question, user_done}
-   │     fallback: deterministic keyword router (vagueness-aware)
+   │     optional (ENABLE_LLM): one Groq JSON call over the WHOLE history,
+   │     with the deterministic router as the fallback on any failure
    │
    ├─ act (app/agent/dispatch.py) — deterministic
    │     refuse | clarify(≤1) | recommend | refine | compare

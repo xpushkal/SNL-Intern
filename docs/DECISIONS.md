@@ -65,7 +65,26 @@ history nears the 8-message cap, commit to a shortlist.
 turn-starvation → empty final shortlist → Recall 0). Prior-clarification detection uses
 our own no-shortlist/non-refusal marker, not a naive "?" check.
 
-### 11. Python 3.11 + Docker pin
+### 11. LLM routing OFF by default (deterministic core is the measured-best)
+**Decision.** `ENABLE_LLM=false` by default; the agent routes deterministically. The
+Groq LLM is opt-in.
+**Why.** On the 10 public traces the deterministic broad-query core scored **Recall@10
+0.510** vs the 8B LLM route's ~0.35, at ~0.04s/turn vs ~9s, with no token budget or
+network dependency and the same 6/6 probes. LLM query *distillation* actively hurt
+recall on multi-faceted/semantic needs (e.g. "senior Rust", gold items inferred). This
+is the same "measure before enabling" discipline applied to MMR/rerank. The LLM remains
+wired for scope/routing robustness and turns on with one env var.
+**Mitigation.** Deterministic scope detection was broadened (injection/off-topic/legal)
+and biased hard against false-positive refusals of valid hiring queries.
+
+### 12. Force Hugging Face offline at serving
+**Decision.** Set `HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` before loading the embedding
+model at serve time.
+**Why.** sentence-transformers issues a blocking HEAD to huggingface.co on first use even
+when the model is cached; with a slow/unavailable network this hangs ~30s and can break
+the first query. The model is baked at build time, so offline is always safe.
+
+### 13. Python 3.11 + Docker pin
 **Decision.** Develop and deploy on Python 3.11.
 **Why.** The system default (3.14) lacks wheels for torch/sentence-transformers; 3.11
 is fully supported and matches the deployment image.
