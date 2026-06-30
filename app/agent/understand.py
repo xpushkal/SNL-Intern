@@ -145,10 +145,13 @@ def understand(messages: list[dict]) -> dict:
     if not groq_client.available():
         return deterministic_understand(messages)
     convo = json.dumps(messages, ensure_ascii=False)
+    strict = "\n\nReturn ONLY a single valid JSON object with exactly the required fields."
     for attempt in range(2):
         try:
-            raw = groq_client.chat_json(UNDERSTAND_SYSTEM, convo)
+            user = convo if attempt == 0 else convo + strict
+            raw = groq_client.chat_json(UNDERSTAND_SYSTEM, user)
             return _normalize(raw)
         except Exception as exc:  # parse error / timeout / API error
             log.warning("understand LLM attempt %d failed: %s", attempt + 1, exc)
+    # Deterministic vagueness-aware fallback (never just blindly recommend).
     return deterministic_understand(messages)
