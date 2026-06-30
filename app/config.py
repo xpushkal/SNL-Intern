@@ -41,7 +41,11 @@ ALIASES_PATH = ARTIFACTS_DIR / "aliases.json"
 
 # --- Models --------------------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# Routing/extraction is an easy task: an 8B model does it well, is much faster, and has
+# a far larger free-tier token budget than 70B (measured: 70B exhausts 100k TPD in one
+# eval replay). 70B remains available via env override for the grounded compare summary.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_COMPARE_MODEL = os.getenv("GROQ_COMPARE_MODEL", GROQ_MODEL)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 
 # --- Latency budget (the evaluator caps each /chat call at 30s) ----------

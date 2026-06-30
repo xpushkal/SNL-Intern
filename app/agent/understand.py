@@ -80,6 +80,15 @@ def _normalize(u: dict) -> dict:
     return base
 
 
+def _guard(u: dict, messages: list[dict]) -> dict:
+    """Reconcile the LLM route with deterministic signals to protect recall/turns."""
+    # Don't waste a turn clarifying a query that clearly has a role/skill/JD.
+    if u.get("intent") == "clarify" and u.get("in_scope", True):
+        if not is_vague(last_user(messages)):
+            u["intent"] = "recommend"
+    return u
+
+
 def deterministic_understand(messages: list[dict]) -> dict:
     """Keyword-based fallback route. Conservative and recall-safe."""
     u = empty_understanding()
@@ -144,14 +153,20 @@ def understand(messages: list[dict]) -> dict:
     """LLM-first understanding with deterministic fallback."""
     if not groq_client.available():
         return deterministic_understand(messages)
-    convo = json.dumps(messages, ensure_ascii=False)
-    strict = "\n\nReturn ONLY a single valid JSON object with exactly the required fields."
+    # Compact, token-frugal transcript (cap to the evaluator's 8-message window).
+    convo = "\n".join(
+        f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages[-8:]
+    )
+    strict = "\n\nReturn ONLY one valid JSON object with exactly the required fields."
     for attempt in range(2):
         try:
             user = convo if attempt == 0 else convo + strict
-            raw = groq_client.chat_json(UNDERSTAND_SYSTEM, user)
-            return _normalize(raw)
-        except Exception as exc:  # parse error / timeout / API error
-            log.warning("understand LLM attempt %d failed: %s", attempt + 1, exc)
+            return _guard(_normalize(groq_client.chat_json(UNDERSTAND_SYSTEM, user)), messages)
+        except json.JSONDecodeError as exc:  # only a parse error is worth retrying
+            log.warning("understand JSON parse failed (attempt %d): %s", attempt + 1, exc)
+            continue
+        except Exception as exc:  # rate limit / timeout / API error -> fallback now
+            log.warning("understand LLM error, using deterministic route: %s", exc)
+            break
     # Deterministic vagueness-aware fallback (never just blindly recommend).
     return deterministic_understand(messages)

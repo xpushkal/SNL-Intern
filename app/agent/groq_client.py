@@ -27,12 +27,14 @@ def _get_client():
     return _client
 
 
-def chat_json(system: str, user: str, *, temperature: float = 0.0) -> dict:
+def chat_json(system: str, user: str, *, temperature: float = 0.0,
+              max_tokens: int = 500) -> dict:
     """Return a parsed JSON object from the model. Raises on hard failure."""
     client = _get_client()
     resp = client.chat.completions.create(
         model=config.GROQ_MODEL,
         temperature=temperature,
+        max_tokens=max_tokens,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": system},
@@ -42,11 +44,13 @@ def chat_json(system: str, user: str, *, temperature: float = 0.0) -> dict:
     return json.loads(resp.choices[0].message.content)
 
 
-def chat_text(system: str, user: str, *, temperature: float = 0.2) -> str:
+def chat_text(system: str, user: str, *, temperature: float = 0.2,
+              max_tokens: int = 350) -> str:
     client = _get_client()
     resp = client.chat.completions.create(
-        model=config.GROQ_MODEL,
+        model=config.GROQ_COMPARE_MODEL,
         temperature=temperature,
+        max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},

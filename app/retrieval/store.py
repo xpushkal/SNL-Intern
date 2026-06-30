@@ -6,6 +6,15 @@ instant, and removes a heavy dependency (FAISS).
 """
 from __future__ import annotations
 
+import os
+
+# Serving uses the BAKED embedding model only -- never phone home to the Hugging Face
+# Hub. Without this, sentence-transformers issues a blocking HEAD request on first use
+# that can hang ~30s (and break) when the network is slow/unavailable. The model is
+# downloaded at build time (app.data.build_index), not here, so offline is always safe.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 import pickle
 import threading
 

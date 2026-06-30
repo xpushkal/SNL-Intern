@@ -1,0 +1,9 @@
+.venv/
+data_raw/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+/tmp/

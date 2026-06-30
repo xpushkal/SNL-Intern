@@ -94,7 +94,10 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
         return items, reply, end
 
     # --- recommend (default) ---------------------------------------------
-    query = (u.get("search_query") or "").strip() or all_user_text(messages)
+    # Broad recall: retrieve over the FULL conversation text, augmented by the LLM's
+    # distilled query for emphasis. (Measured: the distilled query alone underperforms
+    # on multi-faceted/semantic needs where gold items are inferred, e.g. "senior Rust".)
+    query = (all_user_text(messages) + " " + (u.get("search_query") or "")).strip()
     if config.ENABLE_LLM_RERANK and groq_client.available():
         pool = ranking.search(query, hard=u.get("hard", {}), soft=u.get("soft", {}),
                               k=config.RERANK_POOL)

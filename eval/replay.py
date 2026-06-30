@@ -33,26 +33,31 @@ def replay_trace(user_turns: list[str]) -> tuple[list[str], list[float]]:
     return last_nonempty, latencies
 
 
-def run_replay() -> None:
+def run_replay() -> dict[str, list[str]]:
+    """Print the Recall@10 table + latency; return {trace: final urls} for reuse."""
     recalls, all_lat = [], []
-    print(f"{'trace':8s} {'gold':>4s} {'hit':>4s} {'recall@10':>10s}")
+    final_urls: dict[str, list[str]] = {}
+    print(f"{'trace':8s} {'gold':>4s} {'hit':>4s} {'recall@10':>10s}", flush=True)
     for path in trace_files():
         tr = parse_trace(path)
         urls, lat = replay_trace(tr["user_turns"])
+        final_urls[tr["name"]] = urls
         all_lat += lat
         rec = recall_at_k(tr["gold"], urls, 10)
         recalls.append(rec)
         hit = len({norm_url(u) for u in urls[:10]} & tr["gold"])
-        print(f"{tr['name']:8s} {len(tr['gold']):>4d} {hit:>4d} {rec:>10.2f}")
-    print(f"\nMEAN Recall@10 = {statistics.mean(recalls):.3f}")
+        print(f"{tr['name']:8s} {len(tr['gold']):>4d} {hit:>4d} {rec:>10.2f}", flush=True)
+    print(f"\nMEAN Recall@10 = {statistics.mean(recalls):.3f}", flush=True)
     print(
         f"latency/call  p50={statistics.median(all_lat):.3f}s  "
         f"p95={sorted(all_lat)[int(len(all_lat) * 0.95) - 1]:.3f}s  "
-        f"max={max(all_lat):.3f}s  (cap 30s)"
+        f"max={max(all_lat):.3f}s  (cap 30s)",
+        flush=True,
     )
+    return final_urls
 
 
-def run_probes() -> None:
+def run_probes(replay_urls: dict[str, list[str]] | None = None) -> None:
     cat = load_catalog()
     results: dict[str, bool] = {}
 
@@ -86,19 +91,20 @@ def run_probes() -> None:
     results["completion_sets_end"] = (done.end_of_conversation is True)
 
     # no hallucination: every final rec across traces is in the catalog
-    halluc = False
-    for path in trace_files():
-        urls, _ = replay_trace(parse_trace(path)["user_turns"])
-        if any(cat.get_by_url(u) is None for u in urls):
-            halluc = True
+    if replay_urls is None:
+        replay_urls = {parse_trace(p)["name"]: replay_trace(parse_trace(p)["user_turns"])[0]
+                       for p in trace_files()}
+    halluc = any(
+        cat.get_by_url(u) is None for urls in replay_urls.values() for u in urls
+    )
     results["no_hallucinated_items"] = (not halluc)
 
-    print("\nBEHAVIOR PROBES")
+    print("\nBEHAVIOR PROBES", flush=True)
     for name, ok in results.items():
-        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
-    print(f"  pass-rate: {sum(results.values())}/{len(results)}")
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}", flush=True)
+    print(f"  pass-rate: {sum(results.values())}/{len(results)}", flush=True)
 
 
 if __name__ == "__main__":
-    run_replay()
-    run_probes()
+    urls = run_replay()
+    run_probes(urls)
