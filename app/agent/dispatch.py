@@ -16,6 +16,7 @@ from app.agent.understand import all_user_text
 from app.data.catalog import load_catalog
 from app.retrieval import ranking
 from app.retrieval.names import resolve_name, resolve_names
+from app.retrieval.rerank import rerank
 
 log = logging.getLogger("shl.dispatch")
 
@@ -94,9 +95,14 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
 
     # --- recommend (default) ---------------------------------------------
     query = (u.get("search_query") or "").strip() or all_user_text(messages)
-    items = ranking.search(
-        query, hard=u.get("hard", {}), soft=u.get("soft", {}), k=config.RECOMMEND_FILL
-    )
+    if config.ENABLE_LLM_RERANK and groq_client.available():
+        pool = ranking.search(query, hard=u.get("hard", {}), soft=u.get("soft", {}),
+                              k=config.RERANK_POOL)
+        items = rerank(query, pool, config.RECOMMEND_FILL)
+    else:
+        items = ranking.search(
+            query, hard=u.get("hard", {}), soft=u.get("soft", {}), k=config.RECOMMEND_FILL
+        )
     end = user_done and bool(items)
     reply = render.render_confirm(items) if end else render.render_recommend(items)
     return items, reply, end

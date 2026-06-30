@@ -43,6 +43,14 @@ Routing rules:
 Return ONLY the JSON object.
 """
 
+# Optional reranker (feature-flagged). Chooses from the provided candidates ONLY.
+RERANK_SYSTEM = """\
+You re-rank SHL assessment candidates for a hiring need. You are given the need and a \
+list of candidates (id, name, type, description). Return JSON {"ids": [...]} listing \
+the candidate ids from MOST to LEAST relevant. Use ONLY ids from the provided list; \
+never invent ids. Prefer assessments that directly match the role, skills, and level.
+"""
+
 # Grounded comparison: the model may ONLY use the catalog facts provided; no priors.
 COMPARE_SYSTEM = """\
 You compare SHL assessments for a hiring manager. You are given catalog facts for two \

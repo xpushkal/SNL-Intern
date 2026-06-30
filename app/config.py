@@ -68,6 +68,7 @@ INCLUDE_PREPACKAGED = _flag("INCLUDE_PREPACKAGED", False)
 
 # --- Feature flags (OFF until measured) ----------------------------------
 ENABLE_LLM_RERANK = _flag("ENABLE_LLM_RERANK", False)
+RERANK_POOL = int(_num("RERANK_POOL", 25))         # candidates fed to the reranker
 ENABLE_MMR = _flag("ENABLE_MMR", False)
 # Relevance-dominant lambda: MMR acts only as a weak diversity tie-breaker.
 MMR_LAMBDA = _num("MMR_LAMBDA", 0.8)
