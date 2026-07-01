@@ -72,7 +72,7 @@ INCLUDE_PREPACKAGED = _flag("INCLUDE_PREPACKAGED", False)
 
 # --- Feature flags (OFF until measured) ----------------------------------
 # LLM routing is OFF by default: on the public traces the deterministic core measured
-# HIGHER Recall@10 (0.510 vs ~0.35) with far lower latency, zero token cost, and 6/6
+# HIGHER Recall@10 (0.575 vs ~0.35) with far lower latency, zero token cost, and 6/6
 # probes. The LLM stays one env var away (ENABLE_LLM=true) for scope/routing robustness.
 ENABLE_LLM = _flag("ENABLE_LLM", False)
 ENABLE_LLM_RERANK = _flag("ENABLE_LLM_RERANK", False)

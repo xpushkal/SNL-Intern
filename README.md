@@ -21,7 +21,7 @@ POST /chat ──► FastAPI (strict schema, never-500) ──► LangGraph agen
   agent exceptions, and timeouts all degrade to a valid 200 (no 4xx/5xx ever).
 - **Deterministic by default.** The agent clarifies, recommends, refines, compares, and
   refuses fully deterministically — no LLM required. On the public traces this measured
-  *higher* Recall@10 (0.510) than the LLM route, at ~0.04s/turn. The Groq LLM is an
+  *higher* Recall@10 (**0.575**) than the LLM route, at ~0.05s/turn. The Groq LLM is an
   opt-in enhancement (`ENABLE_LLM=true`) for scope/routing robustness.
 - **Hard constraints are inviolable.** Duration caps / required languages / required
   types filter; soft preferences only re-rank. The shortlist returns <10 rather than
@@ -78,6 +78,10 @@ echo "ENABLE_LLM=true" >> .env
 # Run
 uvicorn app.main:app --port 8000
 ```
+
+Then open **http://localhost:8000** for a minimal chat demo UI, or
+**http://localhost:8000/docs** for the interactive API console. (`/` and `/docs` are
+convenience surfaces; the graded API is `/health` + `/chat`.)
 
 ## Evaluation
 

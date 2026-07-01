@@ -69,7 +69,7 @@ our own no-shortlist/non-refusal marker, not a naive "?" check.
 **Decision.** `ENABLE_LLM=false` by default; the agent routes deterministically. The
 Groq LLM is opt-in.
 **Why.** On the 10 public traces the deterministic broad-query core scored **Recall@10
-0.510** vs the 8B LLM route's ~0.35, at ~0.04s/turn vs ~9s, with no token budget or
+0.575** vs the 8B LLM route's ~0.35, at ~0.05s/turn vs ~9s, with no token budget or
 network dependency and the same 6/6 probes. LLM query *distillation* actively hurt
 recall on multi-faceted/semantic needs (e.g. "senior Rust", gold items inferred). This
 is the same "measure before enabling" discipline applied to MMR/rerank. The LLM remains

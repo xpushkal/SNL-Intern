@@ -49,6 +49,27 @@ def test_explicit_completion_ends():
     assert r.end_of_conversation is True and len(r.recommendations) >= 1
 
 
+def test_deterministic_duration_constraint_is_hard():
+    from app.agent.understand import extract_constraints
+
+    hard, _ = extract_constraints("hiring a java dev, test must be under 20 minutes")
+    assert hard.get("max_duration_minutes") == 20
+    # and it actually filters end-to-end
+    r = run_turn([{"role": "user", "content": "java developer, assessment under 15 minutes"}])
+    from app.data.catalog import load_catalog
+
+    cat = load_catalog()
+    for rec in r.recommendations:
+        mins = cat.get_by_url(rec.url)["duration_minutes"]
+        assert mins is not None and mins <= 15
+
+
+def test_no_false_positive_refusal_on_valid_roles():
+    for content in ("hiring a basketball coach", "hiring a salaried sales manager"):
+        r = run_turn([{"role": "user", "content": content}])
+        assert "I can only help you choose SHL assessments" not in r.reply
+
+
 def test_recommendations_only_from_catalog():
     from app.data.catalog import load_catalog
 

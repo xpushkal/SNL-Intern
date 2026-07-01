@@ -13,14 +13,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import config
 from app.responder import safe_fallback_response
 from app.schemas import ChatRequest, ChatResponse
+
+_STATIC = Path(__file__).parent / "static"
 
 log = logging.getLogger("shl")
 
@@ -41,6 +44,12 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SHL Assessment Recommender", version="1.0.0", lifespan=lifespan)
+
+
+@app.get("/", include_in_schema=False)
+async def home() -> FileResponse:
+    """Minimal chat demo UI (not part of the graded API)."""
+    return FileResponse(_STATIC / "index.html")
 
 
 @app.get("/health")

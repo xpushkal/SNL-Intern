@@ -62,10 +62,11 @@ final shortlist, plus latency and 6 behavior probes.
 | **Hybrid (RRF)** | **0.551** |
 | Hybrid + MMR | 0.551 |
 
+**Multi-turn replay (default deterministic config):** mean **Recall@10 = 0.575**.
 **Behavior probes:** 6/6 (refuses off-topic, resists injection, no turn-1 recommend on
 vague, honors edits, completion sets end, no hallucinated items).
-**Latency:** deterministic p50 ≈ 0.04s; with the 8B router p50 ≈ 0.5s, p95 ≈ 10s — well
-inside the 30s cap.
+**Latency:** deterministic p50 ≈ 0.05s; with the 8B router p50 ≈ 0.5s (≈9s in a
+network-degraded sandbox) — inside the 30s cap either way.
 
 ## What didn't work / how I measured
 - **MMR** gave **no** Recall@10 gain in the ablation → left **off** by default (flagged).
@@ -74,7 +75,7 @@ inside the 30s cap.
   (separate, larger budget; faster) and slashed prompt tokens (compact transcript,
   trimmed system prompt, no retry on rate-limits).
 - **LLM routing under-performed and is OFF by default.** The deterministic broad-query
-  core scored **Recall@10 0.510** vs the 8B route's ~0.35 (LLM query *distillation* hurt
+  core scored **Recall@10 0.575** vs the 8B route's ~0.35 (LLM query *distillation* hurt
   multi-faceted/semantic needs like "senior Rust", where gold items are inferred), at
   ~0.04s/turn vs ~9s and with no token/network risk. So `ENABLE_LLM` defaults to false
   (same measure-before-enable discipline as MMR/rerank); the LLM is one env var away for

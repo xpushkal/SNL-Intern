@@ -46,6 +46,35 @@ _OFFTOPIC = ("weather", "recipe", "tell me a joke", "write a poem", "write me a 
              "interview questions", "do my homework")
 
 
+# Explicit duration cap ("under 20 minutes", "no more than 30 min"). Conservative
+# phrasing only -> low false-positive risk before applying it as a HARD filter.
+_DUR_RE = re.compile(
+    r"(?:under|less than|at most|within|shorter than|no more than|max(?:imum)?(?: of)?)"
+    r"\s+(\d{1,3})\s*(?:min|minute)"
+)
+# Seniority keyword -> SHL job level (SOFT ranking signal only, so approximate is fine).
+_SENIORITY = {
+    "graduate": "Graduate", "entry-level": "Entry-Level", "entry level": "Entry-Level",
+    "junior": "Entry-Level", "mid-level": "Mid-Professional", "mid level": "Mid-Professional",
+    "mid-professional": "Mid-Professional", "senior": "Professional Individual Contributor",
+    "manager": "Manager", "director": "Director", "executive": "Executive",
+    "supervisor": "Supervisor",
+}
+
+
+def extract_constraints(text: str) -> tuple[dict, dict]:
+    """Deterministically pull a hard duration cap + soft seniority from free text."""
+    t = (text or "").lower()
+    hard: dict = {}
+    if m := _DUR_RE.search(t):
+        hard["max_duration_minutes"] = int(m.group(1))
+    soft: dict = {}
+    levels = sorted({lvl for kw, lvl in _SENIORITY.items() if kw in t})
+    if levels:
+        soft["job_levels"] = levels
+    return hard, soft
+
+
 def last_user(messages: list[dict]) -> str:
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -101,6 +130,7 @@ def deterministic_understand(messages: list[dict]) -> dict:
     u = empty_understanding()
     text = last_user(messages).lower()
     u["search_query"] = all_user_text(messages)
+    u["hard"], u["soft"] = extract_constraints(u["search_query"])
 
     if any(p in text for p in _INJECTION) or any(p in text for p in _OFFTOPIC):
         u["in_scope"] = False
