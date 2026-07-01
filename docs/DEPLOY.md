@@ -1,8 +1,19 @@
 # Deployment — Hugging Face Spaces (Docker)
 
+**Live:** https://xPushkal-snl-intern.hf.space  ·  `/health`  ·  `/chat`
+
 The service is container-ready. The image bakes the embedding model and retrieval
 artifacts at build time, so there are **no runtime downloads** and cold start fits the
 evaluator's 2-minute health window.
+
+## Re-deploy (after code changes)
+```bash
+make deploy          # clean single-commit snapshot -> Space `main` (rebuilds)
+```
+This runs `scripts/deploy_hf.sh`, which pushes only the current tree (minus SHL's
+assignment docs, which must not be republished and are binary → rejected by HF).
+One-time prereqs are documented at the top of that script (`hf auth login`, the `space`
+remote, and a token-reading credential helper).
 
 ## One-time
 

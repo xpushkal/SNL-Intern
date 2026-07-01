@@ -25,5 +25,8 @@ approach-html:   ## render the 2-page approach doc -> print-ready HTML (open, Sa
 	pandoc docs/APPROACH.md -o docs/APPROACH.html --standalone --embed-resources \
 	  --css docs/approach.css --metadata title="SHL Assessment Recommender — Approach"
 
+deploy:          ## push a clean snapshot to the HF Space (see scripts/deploy_hf.sh)
+	bash scripts/deploy_hf.sh
+
 clean:
 	rm -rf artifacts/embeddings.npy artifacts/bm25.pkl __pycache__ */__pycache__ .pytest_cache
