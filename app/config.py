@@ -70,6 +70,11 @@ FUZZY_THRESHOLD = int(_num("FUZZY_THRESHOLD", 85)) # rapidfuzz name-match cutoff
 # records all end in " Solution" and none appear in any gold shortlist.
 INCLUDE_PREPACKAGED = _flag("INCLUDE_PREPACKAGED", False)
 
+# Embedding scope guard (semantic off-topic refusal on top of keyword injection checks).
+ENABLE_SCOPE_GUARD = _flag("ENABLE_SCOPE_GUARD", True)
+SCOPE_OUT_MIN = _num("SCOPE_OUT_MIN", 0.55)   # min out-of-scope similarity to consider
+SCOPE_MARGIN = _num("SCOPE_MARGIN", 0.06)     # how much out must beat in to refuse
+
 # Family/variant boost: lift an instrument's sibling reports toward it (SHL groups an
 # instrument with several report variants that often co-occur in gold shortlists).
 ENABLE_FAMILY_BOOST = _flag("ENABLE_FAMILY_BOOST", False)

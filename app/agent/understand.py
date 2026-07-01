@@ -10,6 +10,7 @@ import json
 import logging
 import re
 
+from app import config
 from app.agent import groq_client
 from app.agent.prompts import UNDERSTAND_SYSTEM
 from app.agent.state import empty_understanding
@@ -125,14 +126,34 @@ def _guard(u: dict, messages: list[dict]) -> dict:
     return u
 
 
+def _semantic_off_topic(text: str) -> bool:
+    if not config.ENABLE_SCOPE_GUARD:
+        return False
+    try:
+        from app.agent import scope
+
+        return scope.is_off_topic(text)
+    except Exception as exc:  # never let the guard break a turn
+        log.warning("scope guard unavailable: %s", exc)
+        return False
+
+
 def deterministic_understand(messages: list[dict]) -> dict:
     """Keyword-based fallback route. Conservative and recall-safe."""
     u = empty_understanding()
-    text = last_user(messages).lower()
+    last = last_user(messages)
+    text = last.lower()
     u["search_query"] = all_user_text(messages)
     u["hard"], u["soft"] = extract_constraints(u["search_query"])
+    has_prior_list = _has_prior_shortlist(messages)
 
-    if any(p in text for p in _INJECTION) or any(p in text for p in _OFFTOPIC):
+    # Scope: injection (keyword) fires anytime; off-topic (keyword + semantic) only when
+    # there is no ongoing shortlist, so conversational follow-ups are never refused.
+    injection = any(p in text for p in _INJECTION)
+    off_topic = not has_prior_list and (
+        any(p in text for p in _OFFTOPIC) or _semantic_off_topic(last)
+    )
+    if injection or off_topic:
         u["in_scope"] = False
         u["intent"] = "refuse"
         return u
@@ -142,10 +163,9 @@ def deterministic_understand(messages: list[dict]) -> dict:
 
     if any(p in text for p in _COMPARE):
         u["intent"] = "compare"
-        u["compare_names"] = _extract_compare_names(last_user(messages))
+        u["compare_names"] = _extract_compare_names(last)
         return u
 
-    has_prior_list = _has_prior_shortlist(messages)
     if has_prior_list and any(p in text for p in _REFINE):
         u["intent"] = "refine"
         u["remove_names"] = _extract_remove_names(last_user(messages))
