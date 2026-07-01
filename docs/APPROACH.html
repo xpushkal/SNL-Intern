@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>SHL Assessment Recommender — Approach</title>
+  <style>
+
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">@page { size: A4; margin: 14mm 16mm; }
+html { font-size: 10pt; }
+body {
+font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+line-height: 1.34; color: #1a1a1a; max-width: 190mm; margin: 0 auto;
+}
+h1 { font-size: 16pt; margin: 0 0 2pt; }
+h2 { font-size: 11.5pt; margin: 9pt 0 3pt; border-bottom: 1px solid #ccc; padding-bottom: 2pt; }
+h1 + p, h2 + p { margin-top: 2pt; }
+p, li { margin: 3pt 0; }
+ul { margin: 3pt 0; padding-left: 16pt; }
+code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; font-size: 9pt; }
+table { border-collapse: collapse; font-size: 9pt; margin: 4pt 0; }
+th, td { border: 1px solid #bbb; padding: 2pt 6pt; text-align: left; }
+th { background: #f0f0f0; }
+strong { color: #000; }
+a { color: #1a1a1a; text-decoration: none; }
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">SHL Assessment Recommender — Approach</h1>
+</header>
+<h1 id="approach-conversational-shl-assessment-recommender">Approach —
+Conversational SHL Assessment Recommender</h1>
+<h2 id="problem-design-stance">Problem &amp; design stance</h2>
+<p>Build a stateless <code>/chat</code> agent that moves a hiring
+manager from a vague intent to a grounded shortlist of SHL assessments —
+clarifying, recommending, refining, comparing, and refusing out-of-scope
+asks — scored on schema hard-evals, Recall@10, and behavior probes. My
+stance: <strong>reliability and grounding first, recall second,
+cleverness last.</strong> A turn that 500s or returns a hallucinated
+item scores zero regardless of how good the ranking is, so the
+architecture makes invalid output structurally impossible and treats the
+LLM as an <em>enhancement</em> over a fully-working deterministic
+core.</p>
+<h2 id="data-retrieval">Data &amp; retrieval</h2>
+<p>The provided catalog (377 records) has no <code>test_type</code>; its
+<code>keys[]</code> are SHL category names, which the sample traces
+confirm map to the letter codes
+(<code>Personality &amp; Behavior</code>→<code>P</code>). I derive
+<code>test_type</code> from that mapping (priority
+<code>K&gt;A&gt;P&gt;B&gt;C&gt;S&gt;E&gt;D</code> for the 39
+multi-category records). I verified that <strong>all 10 trace gold
+shortlists are 100% in the file</strong>, so it is the recommendable
+universe — no website scraping. The 7 pre-packaged “… Solution” bundles
+are scoped out via a narrow, auditable rule.</p>
+<p>Retrieval <strong>ranks the entire catalog</strong> (it is tiny):
+hard filters first (duration cap / required language / required type —
+never relaxed), then <strong>Reciprocal Rank Fusion of BM25 and dense
+<code>bge-small</code> cosine</strong>, then small soft-preference
+boosts, then top-10. Soft preferences only re-rank; if fewer than 10
+pass the hard filters we return fewer. No FAISS — a brute-force matrix
+multiply over ~370 vectors is exact and instant.</p>
+<h2 id="agent">Agent</h2>
+<p>A 3-node LangGraph (<code>understand → act → respond</code>).
+<code>understand</code> routes intent and extracts cumulative
+constraints from the whole history — deterministically by default, or
+via one Groq JSON call when <code>ENABLE_LLM=true</code>;
+<code>act</code> is deterministic; replies are templated. Because the
+wire schema is fixed and the API is stateless, the <strong>numbered list
+in the reply is the only cross-turn state</strong> — each line prints
+its catalog URL, which I parse back to reconstruct the prior shortlist
+for refinements like “remove the second one”. Clarification is capped at
+one (with a turn-budget backstop so we never starve the 8-turn cap into
+an empty final shortlist). <code>end_of_conversation</code> is true only
+on explicit user completion — matching the traces.</p>
+<h2 id="prompt-design">Prompt design</h2>
+<p>The routing prompt is deliberately small and contract-shaped: it
+returns a fixed JSON object
+(<code>in_scope, intent, search_query, hard/soft constraints, compare/remove names, clarifying_question, user_done</code>)
+and never writes prose or invents names. Comparison uses a separate
+prompt fed <strong>only catalog facts</strong> (no priors), with a
+deterministic field-by-field template as fallback.</p>
+<h2 id="guardrails-anti-hallucination">Guardrails
+(anti-hallucination)</h2>
+<p>Every response passes one gate: each recommendation is canonicalized
+against the catalog (URL returned verbatim, type checked), off-catalog
+and duplicate items are dropped, the list is capped at 10. Combined with
+lenient input parsing + global exception/timeout handlers, <strong>every
+call returns a schema-valid 200</strong> — request errors, LLM failures,
+and timeouts included.</p>
+<h2 id="evaluation">Evaluation</h2>
+<p>Three harnesses (<code>pytest</code>, <code>eval.replay</code>,
+<code>eval.ablation</code>). Replay mirrors the grader: feed each
+trace’s user turns one at a time, carry full history, score Recall@10 on
+the final shortlist, plus latency and 6 behavior probes.</p>
+<p><strong>Retrieval ablation (fixed query):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>Mean Recall@10</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BM25 only</td>
+<td>0.373</td>
+</tr>
+<tr>
+<td>Dense only</td>
+<td>0.468</td>
+</tr>
+<tr>
+<td><strong>Hybrid (RRF)</strong></td>
+<td><strong>0.551</strong></td>
+</tr>
+<tr>
+<td>Hybrid + MMR</td>
+<td>0.551</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Multi-turn replay (default deterministic config):</strong>
+mean <strong>Recall@10 = 0.575</strong>. <strong>Behavior
+probes:</strong> 6/6 (refuses off-topic, resists injection, no turn-1
+recommend on vague, honors edits, completion sets end, no hallucinated
+items). <strong>Latency:</strong> deterministic p50 ≈ 0.05s; with the 8B
+router p50 ≈ 0.5s (≈9s in a network-degraded sandbox) — inside the 30s
+cap either way.</p>
+<h2 id="what-didnt-work-how-i-measured">What didn’t work / how I
+measured</h2>
+<ul>
+<li><strong>MMR</strong> gave <strong>no</strong> Recall@10 gain in the
+ablation → left <strong>off</strong> by default (flagged).</li>
+<li><strong>Family/variant boost</strong> (lift an instrument’s sibling
+reports) <em>reduced</em> Recall@10 (0.575 → 0.555) — a strong family
+displaces other-family gold → left <strong>off</strong>.</li>
+<li><strong>70B routing</strong> exhausted the Groq free-tier daily
+token budget (100k TPD) in a single replay and pushed p95 latency to
+~10s → switched routing to
+<strong><code>llama-3.1-8b-instant</code></strong> (separate, larger
+budget; faster) and slashed prompt tokens (compact transcript, trimmed
+system prompt, no retry on rate-limits).</li>
+<li><strong>LLM routing under-performed and is OFF by default.</strong>
+The deterministic broad-query core scored <strong>Recall@10
+0.575</strong> vs the 8B route’s ~0.35 (LLM query <em>distillation</em>
+hurt multi-faceted/semantic needs like “senior Rust”, where gold items
+are inferred), at ~0.04s/turn vs ~9s and with no token/network risk. So
+<code>ENABLE_LLM</code> defaults to false (same measure-before-enable
+discipline as MMR/rerank); the LLM is one env var away for scope/routing
+robustness, and any LLM failure already falls back to this same
+core.</li>
+</ul>
+<h2 id="ai-tool-usage">AI-tool usage</h2>
+<p>Built with AI-assisted coding (Claude Code) for scaffolding,
+retrieval/agent plumbing, and the eval harness; all design decisions
+(hybrid-rank-all, hard/soft split, state-in-reply,
+flags-off-until-measured, model choice) are documented in
+<code>docs/DECISIONS.md</code> and were driven by the measurements
+above.</p>
+<h2 id="stack">Stack</h2>
+<p><code>bge-small-en-v1.5</code> (local, baked) + BM25 retrieval ·
+FastAPI + Pydantic v2 · LangGraph · rapidfuzz · NumPy · Hugging Face
+Spaces (Docker) · Groq <code>llama-3.1-8b-instant</code> (opt-in).</p>
+</body>
+</html>

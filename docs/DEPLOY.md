@@ -43,6 +43,13 @@ curl -s https://<user>-<space>.hf.space/chat \
   -d '{"messages":[{"role":"user","content":"hiring a java developer"}]}'
 ```
 
+## Submission checklist
+1. **Public endpoint** — `/health` and `/chat` reachable on the Space URL (above).
+2. **Approach PDF (≤2 pages)** — `make approach-html` then open `docs/APPROACH.html`
+   and *Save as PDF* (or `pandoc … --pdf-engine=weasyprint` if installed). Source of
+   truth is `docs/APPROACH.md`.
+3. Paste both into the submission form.
+
 ## Notes
 - **Free-tier token budget.** Routing uses `llama-3.1-8b-instant` (fast, large free
   TPD). If Groq rate-limits, the agent degrades to the deterministic path — still valid
