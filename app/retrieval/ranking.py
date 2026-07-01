@@ -10,6 +10,8 @@ BM25-only / dense-only / hybrid for the ablation harness.
 """
 from __future__ import annotations
 
+import re
+from functools import lru_cache
 from typing import Literal
 
 import numpy as np
@@ -18,6 +20,39 @@ from app import config
 from app.retrieval.store import Retriever, load_retriever
 
 Mode = Literal["bm25", "dense", "hybrid"]
+
+
+def _family_keys(name: str) -> set[str]:
+    """Distinctive family identifiers: uppercase acronyms + a leading 2-word prefix."""
+    toks = re.findall(r"[A-Za-z0-9]+", name)
+    keys = {f"a:{t.lower()}" for t in toks if t.isupper() and len(t) >= 3}
+    words = [w for w in toks if len(w) > 1]
+    if len(words) >= 2 and len(words[0] + words[1]) > 6:
+        keys.add(f"p:{words[0].lower()} {words[1].lower()}")
+    return keys
+
+
+@lru_cache(maxsize=2)
+def _family_membership(n: int) -> list[set[str]]:
+    recs = load_retriever().catalog.records
+    return [_family_keys(r["name"]) for r in recs]
+
+
+def _apply_family_boost(base: np.ndarray) -> np.ndarray:
+    """Add FAMILY_BOOST * (best score in the item's family) so sibling reports of a
+    strong match rise toward it. Bounded (uses the family max, not a sum) so a large
+    family cannot flood the shortlist."""
+    members = _family_membership(len(base))
+    key_best: dict[str, float] = {}
+    for i, keys in enumerate(members):
+        for k in keys:
+            if base[i] > key_best.get(k, -1e9):
+                key_best[k] = base[i]
+    out = base.copy()
+    for i, keys in enumerate(members):
+        if keys:
+            out[i] += config.FAMILY_BOOST * max(key_best[k] for k in keys)
+    return out
 
 
 # --- constraint predicates ----------------------------------------------
@@ -92,6 +127,8 @@ def search(
     records = retr.catalog.records
 
     base = base_scores(retr, query, mode)
+    if config.ENABLE_FAMILY_BOOST and mode != "bm25":
+        base = _apply_family_boost(base)
     scored: list[tuple[float, int]] = []
     for i, rec in enumerate(records):
         if not _hard_ok(rec, hard):

@@ -70,6 +70,8 @@ network-degraded sandbox) — inside the 30s cap either way.
 
 ## What didn't work / how I measured
 - **MMR** gave **no** Recall@10 gain in the ablation → left **off** by default (flagged).
+- **Family/variant boost** (lift an instrument's sibling reports) *reduced* Recall@10
+  (0.575 → 0.555) — a strong family displaces other-family gold → left **off**.
 - **70B routing** exhausted the Groq free-tier daily token budget (100k TPD) in a single
   replay and pushed p95 latency to ~10s → switched routing to **`llama-3.1-8b-instant`**
   (separate, larger budget; faster) and slashed prompt tokens (compact transcript,

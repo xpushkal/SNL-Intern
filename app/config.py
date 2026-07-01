@@ -70,6 +70,11 @@ FUZZY_THRESHOLD = int(_num("FUZZY_THRESHOLD", 85)) # rapidfuzz name-match cutoff
 # records all end in " Solution" and none appear in any gold shortlist.
 INCLUDE_PREPACKAGED = _flag("INCLUDE_PREPACKAGED", False)
 
+# Family/variant boost: lift an instrument's sibling reports toward it (SHL groups an
+# instrument with several report variants that often co-occur in gold shortlists).
+ENABLE_FAMILY_BOOST = _flag("ENABLE_FAMILY_BOOST", False)
+FAMILY_BOOST = _num("FAMILY_BOOST", 0.5)  # fraction of the family's best score
+
 # --- Feature flags (OFF until measured) ----------------------------------
 # LLM routing is OFF by default: on the public traces the deterministic core measured
 # HIGHER Recall@10 (0.575 vs ~0.35) with far lower latency, zero token cost, and 6/6

@@ -51,6 +51,10 @@ wheel-finicky dependency. Larger candidate pools are free, which protects recall
 `ENABLE_LLM_RERANK` are off.
 **Why.** The ablation (`python -m eval.ablation`) shows hybrid (0.551) > dense (0.468)
 > BM25 (0.373), and MMR adds nothing (0.551). We only turn a flag on if measured.
+**Also tried — family/variant boost (`ENABLE_FAMILY_BOOST`).** SHL groups an instrument
+with several report variants that co-occur in gold, so I boosted siblings of strong
+matches. Measured across the replay it *reduced* Recall@10 (0.575 → 0.555 at every
+strength): lifting one family's variants displaces other-family gold. Left OFF.
 
 ### 9. Asymmetric schema strictness
 **Decision.** Output models use `extra="forbid"` and a catalog-validation gate; input
