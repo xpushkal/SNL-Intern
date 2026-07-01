@@ -11,13 +11,14 @@ The dense model is downloaded here so the runtime image can run fully offline
 """
 from __future__ import annotations
 
+import json
 import pickle
 
 import numpy as np
 
 from app import config
 from app.data.catalog import load_catalog
-from app.data.ingest import doc_text
+from app.data.ingest import DOC_SCHEMA_VERSION, catalog_hash, doc_text
 from app.retrieval.text import tokenize
 
 
@@ -42,8 +43,19 @@ def main() -> None:
     with open(config.BM25_PATH, "wb") as fh:
         pickle.dump(bm25, fh)
 
+    manifest = {
+        "embedding_model": config.EMBED_MODEL,
+        "embedding_revision": config.EMBED_REVISION,
+        "vector_dim": int(embeddings.shape[1]),
+        "num_docs": len(docs),
+        "catalog_sha256": catalog_hash(catalog.records),
+        "doc_schema_version": DOC_SCHEMA_VERSION,
+    }
+    config.MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
     print(f"  embeddings: {embeddings.shape} -> {config.EMBEDDINGS_PATH}")
     print(f"  bm25:       {len(docs)} docs -> {config.BM25_PATH}")
+    print(f"  manifest:   {manifest} -> {config.MANIFEST_PATH}")
 
 
 if __name__ == "__main__":

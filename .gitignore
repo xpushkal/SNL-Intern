@@ -12,6 +12,7 @@ data_raw/
 # Built retrieval artifacts (rebuilt by `make build` / Docker build)
 artifacts/embeddings.npy
 artifacts/bm25.pkl
+artifacts/manifest.json
 
 # Env / OS
 .env

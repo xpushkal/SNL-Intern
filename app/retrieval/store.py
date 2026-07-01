@@ -15,6 +15,7 @@ import os
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+import json
 import pickle
 import threading
 
@@ -23,6 +24,30 @@ import numpy as np
 from app import config
 from app.data.catalog import Catalog, load_catalog
 from app.retrieval.text import QUERY_INSTRUCTION, tokenize
+
+
+def _validate_manifest(embeddings: np.ndarray, catalog: Catalog) -> None:
+    """Fail fast (with actionable guidance) if the baked artifacts don't match the
+    current embedding model / catalog / doc-schema -- prevents silent mismatches."""
+    from app.data.ingest import DOC_SCHEMA_VERSION, catalog_hash
+
+    rebuild = "Rebuild artifacts:  python -m app.data.build_index"
+    if not config.MANIFEST_PATH.exists():
+        raise RuntimeError(f"Artifact manifest missing at {config.MANIFEST_PATH}. {rebuild}")
+    man = json.loads(config.MANIFEST_PATH.read_text(encoding="utf-8"))
+    checks = {
+        "embedding_model": (man.get("embedding_model"), config.EMBED_MODEL),
+        "embedding_revision": (man.get("embedding_revision"), config.EMBED_REVISION),
+        "vector_dim": (int(man.get("vector_dim", -1)), int(embeddings.shape[1])),
+        "doc_schema_version": (man.get("doc_schema_version"), DOC_SCHEMA_VERSION),
+        "catalog_sha256": (man.get("catalog_sha256"), catalog_hash(catalog.records)),
+    }
+    mismatches = [f"{k}: manifest={a!r} current={b!r}" for k, (a, b) in checks.items() if a != b]
+    if mismatches:
+        raise RuntimeError(
+            "Artifact/model mismatch — baked embeddings are incompatible.\n  - "
+            + "\n  - ".join(mismatches) + f"\n{rebuild}"
+        )
 
 
 class Retriever:
@@ -73,5 +98,7 @@ def load_retriever() -> Retriever:
                 embeddings = np.load(config.EMBEDDINGS_PATH)
                 with open(config.BM25_PATH, "rb") as fh:
                     bm25 = pickle.load(fh)
-                _INSTANCE = Retriever(load_catalog(), embeddings, bm25)
+                catalog = load_catalog()
+                _validate_manifest(embeddings, catalog)
+                _INSTANCE = Retriever(catalog, embeddings, bm25)
     return _INSTANCE

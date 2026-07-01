@@ -13,18 +13,26 @@ from app.data.catalog import load_catalog
 
 _URL_RE = re.compile(r"https?://[^\s<>)\]]+")
 
+# Machine marker that tags STATE-BEARING replies (recommend / refine / confirm). The
+# active shortlist is reconstructed only from marked messages, so comparisons,
+# clarifications, and refusals never overwrite it. Stripped in the demo UI.
+STATE_MARK = "<!--shl:shortlist-->"
+
 
 def parse_prior_shortlist(messages: list[dict]) -> list[dict]:
-    """Records from the most recent assistant message's numbered list (in order)."""
+    """Records from the latest STATE-BEARING assistant message (recommend/refine/confirm).
+
+    Skips comparisons, clarifications, and refusals (which are not marked), so those
+    never replace the active shortlist."""
     catalog = load_catalog()
     for m in reversed(messages):
         if m.get("role") != "assistant":
             continue
-        urls = _URL_RE.findall(m.get("content") or "")
-        if not urls:
-            return []
+        content = m.get("content") or ""
+        if STATE_MARK not in content:
+            continue  # not a shortlist-bearing reply -> skip
         out, seen = [], set()
-        for u in urls:
+        for u in _URL_RE.findall(content):
             rec = catalog.get_by_url(u)
             if rec and rec["id"] not in seen:
                 seen.add(rec["id"])
@@ -50,14 +58,14 @@ def render_recommend(items: list[dict], *, refined: bool = False) -> str:
               f"{len(items)} SHL assessment{'' if len(items) == 1 else 's'} that fit:")
     )
     body = "\n".join(_line(i, r) for i, r in enumerate(items, 1))
-    return f"{head}\n{body}"
+    return f"{head}\n{body}\n{STATE_MARK}"
 
 
 def render_confirm(items: list[dict]) -> str:
     if not items:
         return "Glad I could help. Let me know if you need anything else."
     body = "\n".join(_line(i, r) for i, r in enumerate(items, 1))
-    return f"Confirmed — your final SHL shortlist:\n{body}"
+    return f"Confirmed — your final SHL shortlist:\n{body}\n{STATE_MARK}"
 
 
 def render_compare(items: list[dict], summary: str) -> str:

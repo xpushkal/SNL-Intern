@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from app import config
 from app.agent import groq_client, render
@@ -40,8 +41,8 @@ def count_clarifications(messages: list[dict]) -> int:
         if m.get("role") != "assistant":
             continue
         content = m.get("content") or ""
-        if render._URL_RE.search(content):
-            continue  # had a shortlist -> not a clarification
+        if render.STATE_MARK in content or render._URL_RE.search(content):
+            continue  # shortlist reply or comparison -> not a clarification
         if _REFUSE_MARKER in content:
             continue  # refusal
         n += 1
@@ -58,7 +59,10 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
 
     intent = u.get("intent", "recommend")
     user_done = bool(u.get("user_done"))
-    actionable = bool(u.get("remove_names") or u.get("add_query") or intent == "compare")
+    actionable = bool(
+        u.get("remove_names") or u.get("keep_only_names") or u.get("add_query")
+        or intent == "compare"
+    )
 
     # --- explicit completion with nothing new -> confirm prior shortlist --
     if user_done and not actionable and prior:
@@ -113,45 +117,89 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
 
 # --- helpers -------------------------------------------------------------
 def _apply_refine(prior: list[dict], u: dict) -> list[dict]:
+    """Apply keep-only, removes, newly-introduced hard constraints, and adds to the
+    current shortlist. Adds evict the lowest-ranked item so they are always retained."""
+    hard = u.get("hard", {}) or {}
+    soft = u.get("soft", {}) or {}
     keep = list(prior)
+
+    # keep-only: restrict to the named items (resolved within the current shortlist)
+    keep_only = u.get("keep_only_names") or []
+    if keep_only:
+        idxs: list[int] = []
+        for target in keep_only:
+            i = _resolve_in_prior(target, prior)
+            if i is not None and i not in idxs:
+                idxs.append(i)
+        if idxs:
+            keep = [prior[i] for i in idxs]
+
+    # removes (may be several)
     for target in u.get("remove_names", []):
-        idx = _resolve_in_prior(target, keep)
-        if idx is not None:
-            keep.pop(idx)
-    add_query = (u.get("add_query") or "").strip()
-    if add_query:
+        i = _resolve_in_prior(target, keep)
+        if i is not None:
+            keep.pop(i)
+
+    # apply NEWLY-introduced hard constraints (duration / language / test-type) to the
+    # existing shortlist -- drop items that now violate them.
+    if hard:
+        keep = [r for r in keep if ranking.hard_ok(r, hard)]
+
+    # adds: one item per requested capability, evicting the lowest-ranked to make room.
+    for add_query in _add_queries(u):
         existing = {r["id"] for r in keep}
-        for rec in ranking.search(add_query, hard=u.get("hard", {}), soft=u.get("soft", {}),
-                                  k=config.RECOMMEND_FILL):
-            if rec["id"] not in existing:
-                keep.append(rec)
-                existing.add(rec["id"])
+        for rec in ranking.search(add_query, hard=hard, soft=soft, k=config.RECOMMEND_FILL):
+            if rec["id"] in existing:
+                continue
             if len(keep) >= config.MAX_RECS:
-                break
+                keep.pop()  # evict lowest-ranked so the addition is retained
+            keep.append(rec)
+            break
     return keep[: config.MAX_RECS]
 
 
+def _add_queries(u: dict) -> list[str]:
+    out = []
+    if (aq := (u.get("add_query") or "").strip()):
+        out.append(aq)
+    out += [n for n in (u.get("add_names") or []) if n]
+    return out
+
+
+_POS_RE = re.compile(r"^#?\s*(\d{1,2})$|(?:item|number|option|#)\s*(\d{1,2})")
+
+
 def _resolve_in_prior(target: str, prior: list[dict]) -> int | None:
-    """Resolve 'the second one' / '#2' / a name to an index in the current shortlist."""
+    """Resolve 'the second one' / '#2' / a name to an index in the current shortlist.
+
+    Positional matching is strict (a bare "#N"/"item N"), so a name that merely contains
+    a number -- e.g. "Java 8 (New)" -- resolves by NAME, not to position 8."""
     t = (target or "").strip().lower()
     if not t or not prior:
         return None
     for word, idx in _ORDINALS.items():
-        if word in t.split() or word == t:
+        if word == t or word in t.split():
             return idx if idx < len(prior) else None
     if t in {"last", "the last one", "last one"}:
         return len(prior) - 1
-    digits = "".join(ch for ch in t if ch.isdigit())
-    if digits:
-        i = int(digits) - 1
+    if m := _POS_RE.search(t):
+        i = int(m.group(1) or m.group(2)) - 1
         if 0 <= i < len(prior):
             return i
-    # name match against the current shortlist only
+    # exact/alias/global resolution first (unambiguous)
     rec = resolve_name(target)
     if rec:
         for i, r in enumerate(prior):
             if r["id"] == rec["id"]:
                 return i
+    # lenient fuzzy against the SHOWN shortlist only (small set) -- the user is referring
+    # to an item already in front of them, so a shorthand like "Verify G+" should match.
+    from rapidfuzz import fuzz, process
+
+    names = [r["name"] for r in prior]
+    best = process.extractOne(target, names, scorer=fuzz.WRatio)
+    if best and best[1] >= 70:
+        return names.index(best[0])
     return None
 
 

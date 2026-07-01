@@ -51,14 +51,15 @@ class Catalog:
 
     def canonicalize(self, name: str, url: str, test_type: str) -> dict | None:
         """Return the canonical recommendation for a (name|url) if it exists in the
-        catalog AND the claimed test_type is one of the record's real codes; else None.
-        This is the anti-hallucination gate applied before every response."""
+        catalog AND is an Individual Test Solution; else None. This is the final gate
+        applied before every response, so a pre-packaged Job Solution can never be
+        returned -- including via comparison or exact-name resolution. The test_type is
+        always corrected to the record's canonical value."""
         rec = self.get(name=name, url=url)
         if rec is None:
             return None
-        if test_type and test_type not in (rec["test_types"] or [rec["test_type"]]):
-            # Name/url is real but the type was fabricated -> fix to canonical.
-            return self.to_recommendation(rec)
+        if not rec.get("is_individual") and not config.INCLUDE_PREPACKAGED:
+            return None  # pre-packaged Job Solution -> out of scope, never returned
         return self.to_recommendation(rec)
 
 

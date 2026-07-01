@@ -61,14 +61,39 @@ _SENIORITY = {
     "manager": "Manager", "director": "Director", "executive": "Executive",
     "supervisor": "Supervisor",
 }
+_LANGS = ("english", "german", "french", "spanish", "italian", "portuguese", "dutch",
+          "chinese", "japanese", "korean", "arabic", "hindi", "polish", "russian")
+# HARD language requirement ONLY on explicit phrasing. A casual "assessed in Spanish"
+# must NOT filter -- verified against trace C7, whose gold includes English-only tests
+# despite mentioning Spanish. So we require "must be/available/only in <lang>" or
+# "<lang> only", never a bare "in <lang>".
+_LANG_RE = re.compile(
+    r"(?:must be (?:available )?in|available in|only in)\s+(" + "|".join(_LANGS) + r")\b"
+    r"|\b(" + "|".join(_LANGS) + r")\s+only\b"
+)
+_TYPE_WORDS = {"personality": "P", "behaviour": "P", "behavior": "P", "cognitive": "A",
+               "ability": "A", "aptitude": "A", "knowledge": "K", "skills": "K",
+               "situational": "B", "biodata": "B", "simulation": "S", "competency": "C",
+               "competencies": "C"}
+# A test-type becomes a HARD filter only when phrased as a constraint over the shortlist.
+_TYPE_CONSTRAINT_RE = re.compile(
+    r"\b(?:make (?:them|it|these)|must be|should (?:all )?be|only|all of them|change (?:them|it) to)\b")
 
 
 def extract_constraints(text: str) -> tuple[dict, dict]:
-    """Deterministically pull a hard duration cap + soft seniority from free text."""
+    """Deterministically pull HARD constraints (duration cap / language / test-type) and
+    a SOFT seniority signal from free text."""
     t = (text or "").lower()
     hard: dict = {}
     if m := _DUR_RE.search(t):
         hard["max_duration_minutes"] = int(m.group(1))
+    if lm := _LANG_RE.search(t):
+        lang = next(g for g in lm.groups() if g)
+        hard["languages"] = [lang.capitalize()]
+    if _TYPE_CONSTRAINT_RE.search(t):
+        codes = sorted({c for w, c in _TYPE_WORDS.items() if re.search(rf"\b{w}\b", t)})
+        if codes:
+            hard["test_types"] = codes
     soft: dict = {}
     levels = sorted({lvl for kw, lvl in _SENIORITY.items() if kw in t})
     if levels:
@@ -107,7 +132,7 @@ def _normalize(u: dict) -> dict:
                 base[k] = u[k]
     base["hard"] = base.get("hard") or {}
     base["soft"] = base.get("soft") or {}
-    for k in ("compare_names", "remove_names"):
+    for k in ("compare_names", "remove_names", "keep_only_names"):
         if not isinstance(base.get(k), list):
             base[k] = []
     base["in_scope"] = bool(base.get("in_scope", True))
@@ -147,13 +172,14 @@ def deterministic_understand(messages: list[dict]) -> dict:
     u["hard"], u["soft"] = extract_constraints(u["search_query"])
     has_prior_list = _has_prior_shortlist(messages)
 
-    # Scope: injection (keyword) fires anytime; off-topic (keyword + semantic) only when
-    # there is no ongoing shortlist, so conversational follow-ups are never refused.
+    # Scope is evaluated on EVERY latest request, even mid-conversation: keyword
+    # injection and keyword off-topic (weather / legal / hiring-advice) always fire, so a
+    # legal or weather question after a recommendation is still refused. Only the semantic
+    # guard stays gated to turn-1-ish, to avoid refusing follow-ups like "perfect, thanks".
     injection = any(p in text for p in _INJECTION)
-    off_topic = not has_prior_list and (
-        any(p in text for p in _OFFTOPIC) or _semantic_off_topic(last)
-    )
-    if injection or off_topic:
+    keyword_off_topic = any(p in text for p in _OFFTOPIC)
+    semantic_off_topic = (not has_prior_list) and _semantic_off_topic(last)
+    if injection or keyword_off_topic or semantic_off_topic:
         u["in_scope"] = False
         u["intent"] = "refuse"
         return u
@@ -166,12 +192,16 @@ def deterministic_understand(messages: list[dict]) -> dict:
         u["compare_names"] = _extract_compare_names(last)
         return u
 
-    if has_prior_list and any(p in text for p in _REFINE):
+    refine_triggered = has_prior_list and (
+        any(p in text for p in _REFINE)
+        or _KEEP_CONFIRM_RE.search(text)
+        or re.search(r"(?i)\b(show|same)\b.*\b(shortlist|list|them|it)\b", text)
+        or re.search(r"(?i)final (?:list|shortlist)", text)
+    )
+    if refine_triggered:
         u["intent"] = "refine"
-        u["remove_names"] = _extract_remove_names(last_user(messages))
-        m = re.search(r"add (?:a |an |some )?(.+?)(?: test| assessment|s)?$", text)
-        if "add" in text and m:
-            u["add_query"] = m.group(1).strip()
+        if not _KEEP_CONFIRM_RE.search(last):  # "keep the list as is" -> no-op (return prior)
+            _parse_refine_ops(last, u)
         return u
 
     if u["user_done"]:
@@ -189,6 +219,11 @@ def deterministic_understand(messages: list[dict]) -> dict:
     return u
 
 
+def _split_names(s: str) -> list[str]:
+    parts = re.split(r"\s*(?:,| and | & )\s*", (s or "").strip())
+    return [p.strip(" .?") for p in parts if p.strip(" .?")][:6]
+
+
 def _extract_compare_names(text: str) -> list[str]:
     t = re.sub(r"(?i)what(?:'s| is) the difference between|difference between|compare|versus|\bvs\b", "|", text)
     parts = re.split(r"\||,| and ", t)
@@ -196,8 +231,70 @@ def _extract_compare_names(text: str) -> list[str]:
 
 
 def _extract_remove_names(text: str) -> list[str]:
-    m = re.search(r"(?i)(?:remove|drop|without|exclude|take out)\s+(?:the\s+)?(.+?)(?:[.,]|$)", text)
-    return [m.group(1).strip()] if m else []
+    m = re.search(r"(?i)(?:remove|drop|without|exclude|take out|get rid of)\s+(?:the\s+)?(.+?)(?:[.,]|$)", text)
+    return _split_names(m.group(1)) if m else []
+
+
+# "keep the list as is" / "keeping the five solutions as our stack" -> keep unchanged.
+# The negative lookahead avoids swallowing "keep only ..." (a keep-only op).
+_KEEP_CONFIRM_RE = re.compile(
+    r"(?i)\b(?:keep|keeping|leave|retain|stick with)\b(?!\s+(?:only|just)\b)"
+    r".*\b(shortlist|list|solutions|stack|five|those|them|it|as[- ]is|as our|"
+    r"the same|unchanged|as they are)\b")
+# Adds with no retrievable target -> not actionable (don't pollute the shortlist).
+_VAGUE_ADD = {"something", "anything", "something shorter", "a shorter one", "shorter one",
+              "something else", "a shorter alternative", "shorter alternative",
+              "something quicker", "a quicker one", "a shorter test", "one more"}
+
+
+def _clean_add(s: str) -> str:
+    return re.sub(r"(?i)\s+to\b.*$", "", (s or "").strip()).strip(" .?")
+
+
+def _parse_refine_ops(text: str, u: dict) -> None:
+    """Fill remove_names / keep_only_names / add_query for a refine request. Supports
+    add, remove, replace/swap, keep-only, set-exact-list, and multiple actions."""
+    # set the exact list: "final list: X and Y" / "the shortlist should be X and Y"
+    sl = re.search(
+        r"(?i)(?:final (?:list|shortlist)|the (?:final )?(?:list|shortlist))\s*"
+        r"(?::|should be|is|=)\s*(.+)$", text)
+    if sl:
+        u["keep_only_names"] = _split_names(sl.group(1))
+        return
+    # replace / swap X with Y  ->  remove X, add Y (spans the whole clause)
+    rep = re.search(r"(?i)(?:replace|swap)\s+(.+?)\s+(?:with|for|by)\s+(.+?)(?:[.,]|$)", text)
+    if rep:
+        u["remove_names"] = _split_names(rep.group(1))
+        add = _clean_add(rep.group(2))
+        u["add_query"] = "" if add.lower() in _VAGUE_ADD else add
+        return
+    ko = re.search(r"(?i)(?:keep only|only keep|just keep|keep just)\s+(.+?)(?:[.,]|$)", text)
+    if ko:
+        u["keep_only_names"] = _split_names(ko.group(1))
+        return
+    # Clause-aware pass so "remove X and add Y" and "remove X and Y" both parse. A clause
+    # without a verb continues the previous action's target list.
+    removes: list[str] = []
+    adds: list[str] = []
+    current: str | None = None
+    for clause in re.split(r"(?i)\s*(?:,|;| and then | then | and also | and )\s*", text):
+        clause = clause.strip()
+        if not clause:
+            continue
+        rm = re.match(r"(?i)(?:remove|drop|exclude|take out|get rid of|without)\s+(?:the\s+)?(.+)$", clause)
+        am = re.match(r"(?i)(?:add|also include|include|throw in)\s+(?:a |an |some )?(.+)$", clause)
+        if rm:
+            current = "remove"; removes += _split_names(rm.group(1))
+        elif am:
+            current = "add"; adds.append(_clean_add(am.group(1)))
+        elif current == "remove":
+            removes += _split_names(clause)
+        elif current == "add":
+            adds.append(_clean_add(clause))
+    u["remove_names"] = removes
+    adds = [a for a in adds if a and a.lower() not in _VAGUE_ADD]
+    if adds:
+        u["add_query"] = adds[0]
 
 
 def _has_prior_shortlist(messages: list[dict]) -> bool:

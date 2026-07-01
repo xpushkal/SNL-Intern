@@ -18,6 +18,7 @@ Design notes
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -26,6 +27,19 @@ from app import config
 from app.data.test_type_map import all_test_types, primary_test_type
 
 _INT_RE = re.compile(r"\d+")
+
+# Bump when the doc_text() representation changes (invalidates baked embeddings).
+DOC_SCHEMA_VERSION = 1
+
+
+def catalog_hash(records: list[dict]) -> str:
+    """Stable digest of the catalog fields that feed retrieval + recommendations."""
+    fields = ("id", "name", "url", "description", "keys", "job_levels",
+              "duration_raw", "languages", "is_individual")
+    payload = json.dumps(
+        [{k: r.get(k) for k in fields} for r in records], sort_keys=True, ensure_ascii=False
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _parse_minutes(duration: str) -> int | None:

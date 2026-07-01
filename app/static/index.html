@@ -87,7 +87,7 @@ document.getElementById("form").addEventListener("submit", async (e)=>{
     const res = await fetch("/chat", {method:"POST",
       headers:{"content-type":"application/json"}, body:JSON.stringify({messages:history})});
     const data = await res.json();
-    addMsg("assistant", data.reply);
+    addMsg("assistant", (data.reply||"").replace(/<!--[\s\S]*?-->/g,"").trim());
     addRecs(data.recommendations);
     history.push({role:"assistant", content:data.reply});
     if(data.end_of_conversation) chat.appendChild(el("end","— conversation complete —"));

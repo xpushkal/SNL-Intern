@@ -38,6 +38,7 @@ NORMALIZED_PATH = ARTIFACTS_DIR / "catalog.normalized.json"
 EMBEDDINGS_PATH = ARTIFACTS_DIR / "embeddings.npy"
 BM25_PATH = ARTIFACTS_DIR / "bm25.pkl"
 ALIASES_PATH = ARTIFACTS_DIR / "aliases.json"
+MANIFEST_PATH = ARTIFACTS_DIR / "manifest.json"  # provenance for the built artifacts
 
 # --- Models --------------------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -47,6 +48,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_COMPARE_MODEL = os.getenv("GROQ_COMPARE_MODEL", GROQ_MODEL)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+EMBED_REVISION = os.getenv("EMBED_REVISION", "main")  # pinned model revision (provenance)
 
 # --- Latency budget (the evaluator caps each /chat call at 30s) ----------
 LLM_TIMEOUT_S = _num("LLM_TIMEOUT_S", 10.0)        # per LLM call

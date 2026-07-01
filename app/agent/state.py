@@ -38,6 +38,7 @@ def empty_understanding() -> dict:
         "soft": {},
         "compare_names": [],
         "remove_names": [],
+        "keep_only_names": [],   # refine: restrict the shortlist to these items
         "add_query": None,
         "clarifying_question": None,
         "user_done": False,

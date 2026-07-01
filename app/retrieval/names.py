@@ -55,6 +55,13 @@ def _alias_index(catalog_id: int) -> dict[str, str | None]:
     return index
 
 
+def _recommendable(rec: dict | None) -> dict | None:
+    """Reject pre-packaged Job Solutions even when matched by exact/curated/alias."""
+    if rec and (rec.get("is_individual") or config.INCLUDE_PREPACKAGED):
+        return rec
+    return None
+
+
 def resolve_name(query: str, catalog: Catalog | None = None) -> dict | None:
     catalog = catalog or load_catalog()
     q = norm_name(query)
@@ -62,15 +69,15 @@ def resolve_name(query: str, catalog: Catalog | None = None) -> dict | None:
         return None
     # 0) curated flagship acronyms
     if q in _CURATED:
-        return catalog.get_by_name(_CURATED[q])
+        return _recommendable(catalog.get_by_name(_CURATED[q]))
     # 1) exact
     if rec := catalog.get_by_name(query):
-        return rec
+        return _recommendable(rec)
     # 2) alias (unambiguous only)
     idx = _alias_index(id(catalog))
     rid = idx.get(q)
     if rid:
-        return catalog.by_id.get(rid)
+        return _recommendable(catalog.by_id.get(rid))
     # 3) fuzzy over recommendable names (WRatio handles partial / out-of-order names)
     names = [r["name"] for r in catalog.recommendable]
     match = process.extractOne(query, names, scorer=fuzz.WRatio)

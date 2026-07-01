@@ -76,6 +76,11 @@ def _hard_ok(rec: dict, hard: dict) -> bool:
     return True
 
 
+def hard_ok(rec: dict, hard: dict) -> bool:
+    """Public: does a record satisfy every hard constraint? (reused by refine)."""
+    return _hard_ok(rec, hard)
+
+
 def _soft_boost(rec: dict, soft: dict) -> float:
     """A small ranking-only nudge in [0, SOFT_BOOST]; never excludes anything."""
     signals: list[float] = []
