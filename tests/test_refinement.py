@@ -85,3 +85,23 @@ def test_new_duration_constraint_applies_to_shortlist():
     for rec in r.recommendations:
         mins = cat.get_by_url(rec.url)["duration_minutes"]
         assert mins is not None and mins <= 15
+
+
+def test_final_list_finalizes_conversation():
+    base = _java_base()
+    a, b = base.recommendations[0].name, base.recommendations[1].name
+    r = run_turn(_hist(base, f"Final list: {a} and {b}."))
+    assert r.end_of_conversation is True
+    assert [x.name for x in r.recommendations] == [a, b]
+
+
+def test_keep_as_is_finalizes_conversation():
+    base = _java_base()
+    r = run_turn(_hist(base, "Understood. Keep the shortlist as-is."))
+    assert r.end_of_conversation is True and len(r.recommendations) == 10
+
+
+def test_mid_conversation_refine_does_not_finalize():
+    base = _java_base()
+    r = run_turn(_hist(base, "add a personality test"))
+    assert r.end_of_conversation is False

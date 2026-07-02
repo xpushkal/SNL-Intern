@@ -32,6 +32,10 @@ _DONE = ("that's all", "thats all", "that is all", "we're done", "were done", "a
          "perfect", "looks good", "that works", "sounds good", "thank you", "thanks",
          "no more", "that's everything", "we are good", "good to go")
 _COMPARE = ("difference between", "compare", " vs ", " versus ", "differ")
+# Strong finalization markers -> the task is complete even alongside a refine op.
+_FINALIZE_RE = re.compile(
+    r"(?i)\bfinal (?:list|shortlist)\b|\bas[- ]is\b|\bas they are\b|"
+    r"\bthat'?s (?:it|final|everything)\b|\bwe'?re (?:all )?done\b|\bgood to go\b")
 _REFINE = ("remove", "drop", "without", "instead", "replace", "add ", "also include",
            "swap", "take out", "exclude", "shorter", "make them", "keep only")
 _INJECTION = ("ignore previous", "ignore the above", "ignore all previous", "ignore your",
@@ -44,7 +48,10 @@ _INJECTION = ("ignore previous", "ignore the above", "ignore all previous", "ign
 _OFFTOPIC = ("weather", "recipe", "tell me a joke", "write a poem", "write me a poem",
              "who won the", "stock price", "capital of", "horoscope", "translate this",
              "is it legal", "legal advice", "lawsuit", "how much should i pay",
-             "interview questions", "do my homework")
+             "interview questions", "do my homework",
+             # legal / regulatory-obligation questions (unambiguous phrasings)
+             "legally required", "legally obligated", "legal obligation", "legal requirement",
+             "required by law", "regulatory obligation", "regulatory requirement")
 
 
 # Explicit duration cap ("under 20 minutes", "no more than 30 min"). Conservative
@@ -187,7 +194,12 @@ def deterministic_understand(messages: list[dict]) -> dict:
         u["intent"] = "refuse"
         return u
 
-    if any(p in text for p in _DONE) and not any(p in text for p in _REFINE):
+    # Completion: plain acknowledgements (only when not also editing) OR an explicit
+    # finalization ("final list: ...", "keep it as-is") -- the latter ends the task even
+    # though it carries a refine op.
+    if _FINALIZE_RE.search(text) or (
+        any(p in text for p in _DONE) and not any(p in text for p in _REFINE)
+    ):
         u["user_done"] = True
 
     if any(p in text for p in _COMPARE):

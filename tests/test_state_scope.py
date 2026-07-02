@@ -51,6 +51,21 @@ def test_scope_enforced_after_recommendation():
         assert r.recommendations == [] and _REFUSAL in r.reply
 
 
+def test_legal_obligation_question_refused():
+    base = _java_base()
+    r = run_turn([
+        {"role": "user", "content": "hiring a java developer"},
+        {"role": "assistant", "content": base.reply},
+        {"role": "user", "content": "Are we legally required by law to test all staff?"},
+    ])
+    assert r.recommendations == [] and _REFUSAL in r.reply
+
+
+def test_compliance_officer_role_not_refused():
+    r = run_turn([{"role": "user", "content": "hiring a compliance officer"}])
+    assert _REFUSAL not in r.reply
+
+
 def test_injection_after_recommendation_refused():
     base = _java_base()
     r = run_turn([
