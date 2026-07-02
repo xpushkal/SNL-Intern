@@ -52,14 +52,14 @@ def test_multiple_actions_remove_and_add():
 
 
 def test_add_multiple_products_retains_both():
-    base = run_turn([{"role": "user", "content": "hiring a cloud engineer"}])
-    r = run_turn([
-        {"role": "user", "content": "hiring a cloud engineer"},
-        {"role": "assistant", "content": base.reply},
-        {"role": "user", "content": "add AWS and Docker"},
-    ])
+    # Java base = 10 items, none AWS/Docker -> forces genuine eviction on each add,
+    # so this catches a later add displacing an earlier one.
+    base = _java_base()
+    r = run_turn(_hist(base, "add AWS and Docker"))
     names = [x.name for x in r.recommendations]
-    assert any("AWS" in n for n in names) and any("Docker" in n for n in names)
+    assert any("AWS" in n for n in names), names
+    assert any("Docker" in n for n in names), names
+    assert len(names) == 10
 
 
 def test_multiple_actions_add_two_and_remove_one():

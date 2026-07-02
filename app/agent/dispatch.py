@@ -144,16 +144,20 @@ def _apply_refine(prior: list[dict], u: dict) -> list[dict]:
     if hard:
         keep = [r for r in keep if ranking.hard_ok(r, hard)]
 
-    # adds: one item per requested capability, evicting the lowest-ranked to make room.
+    # adds: one item per requested capability. Collect them ALL first, then evict from
+    # the ORIGINAL tail to make room -- so a later addition never displaces an earlier
+    # one (e.g. "add AWS and Docker" retains both, not just Docker).
+    additions: list[dict] = []
+    chosen = {r["id"] for r in keep}
     for add_query in _add_queries(u):
-        existing = {r["id"] for r in keep}
         for rec in ranking.search(add_query, hard=hard, soft=soft, k=config.RECOMMEND_FILL):
-            if rec["id"] in existing:
-                continue
-            if len(keep) >= config.MAX_RECS:
-                keep.pop()  # evict lowest-ranked so the addition is retained
-            keep.append(rec)
-            break
+            if rec["id"] not in chosen:
+                additions.append(rec)
+                chosen.add(rec["id"])
+                break
+    if additions:
+        room = max(config.MAX_RECS - len(additions), 0)
+        keep = keep[:room] + additions
     return keep[: config.MAX_RECS]
 
 
