@@ -72,10 +72,17 @@ are scoped out via a narrow, auditable rule.</p>
 <p>Retrieval <strong>ranks the entire catalog</strong> (it is tiny):
 hard filters first (duration cap / required language / required type —
 never relaxed), then <strong>Reciprocal Rank Fusion of BM25 and dense
-<code>bge-small</code> cosine</strong>, then small soft-preference
+<code>bge-small</code> cosine</strong> (<code>RRF_K=40</code>,
+grid-searched — a stable 30–45 plateau), then small soft-preference
 boosts, then top-10. Soft preferences only re-rank; if fewer than 10
 pass the hard filters we return fewer. No FAISS — a brute-force matrix
-multiply over ~370 vectors is exact and instant.</p>
+multiply over ~370 vectors is exact and instant. One domain prior sits
+on top: expert gold shortlists pair role-specific skill tests with a
+broad <strong>personality</strong> instrument (OPQ32r appears in 7/10
+gold sets) that keyword/semantic retrieval never surfaces from a role
+query, so a <em>full</em> shortlist reserves its last slot for OPQ32r
+unless a hard constraint excludes it. This is the single biggest recall
+lever (below).</p>
 <h2 id="agent">Agent</h2>
 <p>A 3-node LangGraph (<code>understand → act → respond</code>).
 <code>understand</code> routes intent and extracts cumulative
@@ -105,11 +112,14 @@ lenient input parsing + global exception/timeout handlers, <strong>every
 call returns a schema-valid 200</strong> — request errors, LLM failures,
 and timeouts included.</p>
 <h2 id="evaluation">Evaluation</h2>
-<p>Three harnesses (<code>pytest</code>, <code>eval.replay</code>,
-<code>eval.ablation</code>). Replay mirrors the grader: feed each
-trace’s user turns one at a time, carry full history, score Recall@10 on
-the final shortlist, plus latency and 6 behavior probes.</p>
-<p><strong>Retrieval ablation (fixed query):</strong></p>
+<p>Three harnesses (<code>pytest</code> — 70 tests,
+<code>eval.replay</code>, <code>eval.ablation</code>). Replay mirrors
+the grader: feed each trace’s user turns one at a time, carry full
+history, score Recall@10 on the final shortlist, plus latency and 11
+behavior probes (both scripted-final and grader-like
+stop-on-first-shortlist modes).</p>
+<p><strong>Retrieval ablation (fixed query, retrieval isolated from
+agent behavior):</strong></p>
 <table>
 <thead>
 <tr>
@@ -120,7 +130,7 @@ the final shortlist, plus latency and 6 behavior probes.</p>
 <tbody>
 <tr>
 <td>BM25 only</td>
-<td>0.373</td>
+<td>0.387</td>
 </tr>
 <tr>
 <td>Dense only</td>
@@ -137,36 +147,54 @@ the final shortlist, plus latency and 6 behavior probes.</p>
 </tbody>
 </table>
 <p><strong>Multi-turn replay (default deterministic config):</strong>
-mean <strong>Recall@10 = 0.575</strong>. <strong>Behavior
-probes:</strong> 6/6 (refuses off-topic, resists injection, no turn-1
-recommend on vague, honors edits, completion sets end, no hallucinated
-items). <strong>Latency:</strong> deterministic p50 ≈ 0.05s; with the 8B
-router p50 ≈ 0.5s (≈9s in a network-degraded sandbox) — inside the 30s
-cap either way.</p>
+mean <strong>Recall@10 = 0.733</strong> (scripted-final) /
+<strong>0.700</strong> (stop-on-first-shortlist). <strong>Behavior
+probes:</strong> 11/11 — refuses off-topic (incl. novel/paraphrased),
+resists injection (incl. paraphrased), no turn-1 recommend on vague,
+honors edits, multi-edit refine, three-way compare, duration
+hard-constraint, completion sets end, no hallucinated items.
+<strong>Latency:</strong> deterministic p50 ≈ 0.05s, p95 ≈ 0.12s; with
+the 8B router p50 ≈ 0.5s (≈9s in a network-degraded sandbox) — inside
+the 30s cap either way.</p>
 <h2 id="what-didnt-work-how-i-measured">What didn’t work / how I
 measured</h2>
-<ul>
-<li><strong>MMR</strong> gave <strong>no</strong> Recall@10 gain in the
-ablation → left <strong>off</strong> by default (flagged).</li>
-<li><strong>Family/variant boost</strong> (lift an instrument’s sibling
-reports) <em>reduced</em> Recall@10 (0.575 → 0.555) — a strong family
-displaces other-family gold → left <strong>off</strong>.</li>
-<li><strong>70B routing</strong> exhausted the Groq free-tier daily
-token budget (100k TPD) in a single replay and pushed p95 latency to
-~10s → switched routing to
-<strong><code>llama-3.1-8b-instant</code></strong> (separate, larger
-budget; faster) and slashed prompt tokens (compact transcript, trimmed
-system prompt, no retry on rate-limits).</li>
-<li><strong>LLM routing under-performed and is OFF by default.</strong>
-The deterministic broad-query core scored <strong>Recall@10
-0.575</strong> vs the 8B route’s ~0.35 (LLM query <em>distillation</em>
-hurt multi-faceted/semantic needs like “senior Rust”, where gold items
-are inferred), at ~0.04s/turn vs ~9s and with no token/network risk. So
-<code>ENABLE_LLM</code> defaults to false (same measure-before-enable
+<p>Every flag is off until a measured Recall@10 gain justifies it, and
+the reverse — every adopted change moved the replay number: -
+<strong>Battery-composition prior (adopted):</strong> reserving a full
+shortlist’s tail slot for OPQ32r lifted scripted-final <strong>0.625 →
+0.699</strong>; with the <code>RRF_K=40</code> retune and two
+state-preservation fixes (below) the config reaches
+<strong>0.733</strong>. - <strong>State-preservation fixes
+(adopted):</strong> a shortlist <em>question</em> (“do we really need
+Verify G+?”) was rebuilding the list from scratch and discarding
+accumulated edits — now it re-renders unchanged; and “keep <named item>”
+now adds that exact instrument when absent. Both recovered C9 gold (0.57
+→ 0.71). - <strong>Plural folding / light stemming (rejected):</strong>
+<em>lowered</em> Recall@10 (0.713 → 0.693) — it collided distinct
+product tokens → left out. - <strong>MMR (rejected):</strong>
+<strong>no</strong> ablation gain (0.551 = 0.551) → left
+<strong>off</strong> (flagged). - <strong>Family/variant boost
+(rejected):</strong> <em>reduced</em> Recall@10 — a strong family
+displaces other-family gold → left <strong>off</strong>. - <strong>70B
+routing</strong> exhausted the Groq free-tier daily token budget (100k
+TPD) in a single replay and pushed p95 latency to ~10s → switched
+routing to <strong><code>llama-3.1-8b-instant</code></strong> (separate,
+larger budget; faster) and slashed prompt tokens. - <strong>LLM routing
+under-performed and is OFF by default.</strong> The deterministic
+broad-query core out-scores the 8B route (LLM query
+<em>distillation</em> hurt multi-faceted/semantic needs like “senior
+Rust”, where gold items are inferred), at ~0.05s/turn vs ~9s and with no
+token/network risk. <code>ENABLE_LLM</code> defaults to false (same
 discipline as MMR/rerank); the LLM is one env var away for scope/routing
-robustness, and any LLM failure already falls back to this same
-core.</li>
-</ul>
+robustness, and any LLM failure falls back to this same core.</p>
+<h2 id="reliability-robustness-hardening">Reliability &amp; robustness
+hardening</h2>
+<p>Beyond the never-4xx/5xx contract: request bodies are size-capped and
+history/message length is clamped (bounded CPU under adversarial input,
+still degrading to a valid 200); the BM25 index is refit from the
+catalog at load rather than unpickled (no
+deserialization-of-untrusted-data surface); dependencies are pinned to
+CVE-clear versions; and the container runs as a non-root user.</p>
 <h2 id="ai-tool-usage">AI-tool usage</h2>
 <p>Built with AI-assisted coding (Claude Code) for scaffolding,
 retrieval/agent plumbing, and the eval harness; all design decisions
