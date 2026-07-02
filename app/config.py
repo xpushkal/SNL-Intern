@@ -48,7 +48,10 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_COMPARE_MODEL = os.getenv("GROQ_COMPARE_MODEL", GROQ_MODEL)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
-EMBED_REVISION = os.getenv("EMBED_REVISION", "main")  # pinned model revision (provenance)
+# Immutable Hugging Face commit SHA (never the mutable "main") so the baked embeddings
+# and the runtime model are provably the same weights. Passed to SentenceTransformer at
+# both build and serve time and recorded in the artifact manifest.
+EMBED_REVISION = os.getenv("EMBED_REVISION", "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a")
 
 # --- Latency budget (the evaluator caps each /chat call at 30s) ----------
 LLM_TIMEOUT_S = _num("LLM_TIMEOUT_S", 10.0)        # per LLM call

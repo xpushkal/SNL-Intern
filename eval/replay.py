@@ -17,10 +17,15 @@ from app.data.catalog import load_catalog, norm_url
 from eval.common import parse_trace, recall_at_k, trace_files
 
 
-def replay_trace(user_turns: list[str]) -> tuple[list[str], list[float]]:
-    """Return (final recommendation urls, per-call latencies)."""
+def replay_trace(user_turns: list[str], stop_on_first: bool = False
+                 ) -> tuple[list[str], list[float]]:
+    """Return (recommendation urls, per-call latencies).
+
+    stop_on_first=False (scripted): play every trace turn, take the LAST shortlist.
+    stop_on_first=True  (grader-like): stop as soon as the agent returns a non-empty
+    shortlist -- mirrors a simulated user who ends the conversation on the first list."""
     messages: list[dict] = []
-    last_nonempty: list[str] = []
+    urls: list[str] = []
     latencies: list[float] = []
     for ut in user_turns:
         messages.append({"role": "user", "content": ut})
@@ -29,25 +34,33 @@ def replay_trace(user_turns: list[str]) -> tuple[list[str], list[float]]:
         latencies.append(time.perf_counter() - t0)
         messages.append({"role": "assistant", "content": resp.reply})
         if resp.recommendations:
-            last_nonempty = [r.url for r in resp.recommendations]
-    return last_nonempty, latencies
+            urls = [r.url for r in resp.recommendations]
+            if stop_on_first:
+                break
+    return urls, latencies
 
 
 def run_replay() -> dict[str, list[str]]:
-    """Print the Recall@10 table + latency; return {trace: final urls} for reuse."""
-    recalls, all_lat = [], []
+    """Print both Recall@10 modes + latency; return {trace: scripted urls} for reuse."""
+    scripted, firstshot, all_lat = [], [], []
     final_urls: dict[str, list[str]] = {}
-    print(f"{'trace':8s} {'gold':>4s} {'hit':>4s} {'recall@10':>10s}", flush=True)
+    print(f"{'trace':8s} {'gold':>4s} {'scripted@10':>12s} {'first-list@10':>14s}", flush=True)
     for path in trace_files():
         tr = parse_trace(path)
-        urls, lat = replay_trace(tr["user_turns"])
-        final_urls[tr["name"]] = urls
+        urls_s, lat = replay_trace(tr["user_turns"], stop_on_first=False)
+        urls_f, _ = replay_trace(tr["user_turns"], stop_on_first=True)
+        final_urls[tr["name"]] = urls_s
         all_lat += lat
-        rec = recall_at_k(tr["gold"], urls, 10)
-        recalls.append(rec)
-        hit = len({norm_url(u) for u in urls[:10]} & tr["gold"])
-        print(f"{tr['name']:8s} {len(tr['gold']):>4d} {hit:>4d} {rec:>10.2f}", flush=True)
-    print(f"\nMEAN Recall@10 = {statistics.mean(recalls):.3f}", flush=True)
+        rs = recall_at_k(tr["gold"], urls_s, 10)
+        rf = recall_at_k(tr["gold"], urls_f, 10)
+        scripted.append(rs)
+        firstshot.append(rf)
+        print(f"{tr['name']:8s} {len(tr['gold']):>4d} {rs:>12.2f} {rf:>14.2f}", flush=True)
+    print(
+        f"\nMEAN Recall@10   scripted-final = {statistics.mean(scripted):.3f}"
+        f"   stop-on-first-shortlist = {statistics.mean(firstshot):.3f}",
+        flush=True,
+    )
     print(
         f"latency/call  p50={statistics.median(all_lat):.3f}s  "
         f"p95={sorted(all_lat)[int(len(all_lat) * 0.95) - 1]:.3f}s  "

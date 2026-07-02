@@ -39,7 +39,7 @@ def empty_understanding() -> dict:
         "compare_names": [],
         "remove_names": [],
         "keep_only_names": [],   # refine: restrict the shortlist to these items
-        "add_query": None,
+        "add_queries": [],       # refine: capabilities/products to add (one item each)
         "clarifying_question": None,
         "user_done": False,
     }

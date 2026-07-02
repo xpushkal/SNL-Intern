@@ -19,7 +19,7 @@ Fields:
  "compare_names": [],         // assessments to compare
  "remove_names": [],          // items to drop from the current shortlist
  "keep_only_names": [],       // restrict the shortlist to exactly these items (set/keep-only)
- "add_query": str|null,       // capability to add to the shortlist
+ "add_queries": [],           // capabilities/products to ADD (one shortlist item each), e.g. ["AWS","Docker"]
  "clarifying_question": str|null,
  "user_done": bool            // true only if the latest message explicitly ends the task
 }

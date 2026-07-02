@@ -61,9 +61,9 @@ class Retriever:
     @property
     def model(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
+            from app.retrieval.embedding import load_embed_model
 
-            self._model = SentenceTransformer(config.EMBED_MODEL)
+            self._model = load_embed_model()  # pinned revision
         return self._model
 
     def embed_query(self, query: str) -> np.ndarray:

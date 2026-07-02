@@ -132,9 +132,12 @@ def _normalize(u: dict) -> dict:
                 base[k] = u[k]
     base["hard"] = base.get("hard") or {}
     base["soft"] = base.get("soft") or {}
-    for k in ("compare_names", "remove_names", "keep_only_names"):
+    for k in ("compare_names", "remove_names", "keep_only_names", "add_queries"):
         if not isinstance(base.get(k), list):
             base[k] = []
+    # Back-compat: accept a singular add_query from the LLM and fold it in.
+    if u.get("add_query") and not base["add_queries"]:
+        base["add_queries"] = [u["add_query"]]
     base["in_scope"] = bool(base.get("in_scope", True))
     base["user_done"] = bool(base.get("user_done", False))
     if base["intent"] not in {"clarify", "recommend", "refine", "compare", "refuse"}:
@@ -224,10 +227,28 @@ def _split_names(s: str) -> list[str]:
     return [p.strip(" .?") for p in parts if p.strip(" .?")][:6]
 
 
+# Strip leading question scaffolding ("how does", "what's the", "tell me", ...).
+_COMPARE_STRIP_RE = re.compile(
+    r"(?i)^\s*(?:how\s+(?:do|does|are)\s+|what(?:'s| is| are)?\s+(?:the\s+)?|"
+    r"can you\s+|could you\s+|tell me\s+|please\s+|i want to\s+|i'd like to\s+)+")
+# Comparison keywords -> a delimiter. Bare 'with'/'to' are handled separately (the
+# "compare X with/to Y" form) to avoid splitting names like "Attention to Detail".
+_COMPARE_KW_RE = re.compile(
+    r"(?i)difference between|different from|differs? from|compared?\s+(?:to|with)|"
+    r"compare|versus|\bvs\.?\b")
+_COMPARE_SPLIT_RE = re.compile(r"\s*(?:\||,| and | & )\s*")
+
+
 def _extract_compare_names(text: str) -> list[str]:
-    t = re.sub(r"(?i)what(?:'s| is) the difference between|difference between|compare|versus|\bvs\b", "|", text)
-    parts = re.split(r"\||,| and ", t)
-    return [p.strip(" ?.") for p in parts if len(p.strip(" ?.")) >= 2][:4]
+    """Extract EVERY explicitly-named assessment from a comparison request. Handles
+    'difference between', 'different from', 'versus'/'vs', and 'compare X with/to Y'."""
+    t = _COMPARE_STRIP_RE.sub("", (text or "").strip())
+    if m := re.search(r"(?i)\bcompare\s+(.+?)\s+(?:with|to)\s+(.+)$", t):
+        cand = [m.group(1), m.group(2)]
+    else:
+        cand = _COMPARE_SPLIT_RE.split(_COMPARE_KW_RE.sub("|", t))
+    names = [c.strip(" ?.") for c in cand if len(c.strip(" ?.")) >= 2]
+    return [n for n in names if n.lower() not in {"the", "difference", "between"}][:4]
 
 
 def _extract_remove_names(text: str) -> list[str]:
@@ -266,7 +287,7 @@ def _parse_refine_ops(text: str, u: dict) -> None:
     if rep:
         u["remove_names"] = _split_names(rep.group(1))
         add = _clean_add(rep.group(2))
-        u["add_query"] = "" if add.lower() in _VAGUE_ADD else add
+        u["add_queries"] = [] if add.lower() in _VAGUE_ADD else [add]
         return
     ko = re.search(r"(?i)(?:keep only|only keep|just keep|keep just)\s+(.+?)(?:[.,]|$)", text)
     if ko:
@@ -292,9 +313,7 @@ def _parse_refine_ops(text: str, u: dict) -> None:
         elif current == "add":
             adds.append(_clean_add(clause))
     u["remove_names"] = removes
-    adds = [a for a in adds if a and a.lower() not in _VAGUE_ADD]
-    if adds:
-        u["add_query"] = adds[0]
+    u["add_queries"] = [a for a in adds if a and a.lower() not in _VAGUE_ADD]
 
 
 def _has_prior_shortlist(messages: list[dict]) -> bool:

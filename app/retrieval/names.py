@@ -17,10 +17,14 @@ from app.data.catalog import Catalog, load_catalog, norm_name
 
 _STOP = {"and", "of", "the", "for", "a", "an", "to", "in", "new", "report", "test"}
 
-# Curated aliases for genuinely ambiguous flagship acronyms (the bare acronym maps
-# to many products, so we pin it to the canonical instrument).
+# Curated aliases for genuinely ambiguous flagship names (the bare form maps to many
+# products / a fuzzy neighbour, so we pin it to the canonical instrument). Keys are
+# normalized (lowercased, single-spaced) names.
 _CURATED = {
     "opq": "Occupational Personality Questionnaire OPQ32r",
+    "dsi": "Dependability and Safety Instrument (DSI)",
+    "verify g+": "SHL Verify Interactive G+",
+    "verify g plus": "SHL Verify Interactive G+",
 }
 
 

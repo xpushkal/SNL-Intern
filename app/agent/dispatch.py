@@ -60,7 +60,7 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
     intent = u.get("intent", "recommend")
     user_done = bool(u.get("user_done"))
     actionable = bool(
-        u.get("remove_names") or u.get("keep_only_names") or u.get("add_query")
+        u.get("remove_names") or u.get("keep_only_names") or u.get("add_queries")
         or intent == "compare"
     )
 
@@ -123,16 +123,15 @@ def _apply_refine(prior: list[dict], u: dict) -> list[dict]:
     soft = u.get("soft", {}) or {}
     keep = list(prior)
 
-    # keep-only: restrict to the named items (resolved within the current shortlist)
+    # keep-only / set-exact-list: restrict the shortlist to the named items. Positional
+    # references resolve within the shown list; named items resolve catalog-wide (via
+    # curated aliases) so "final list: Verify G+ ..." yields the exact instrument and never
+    # a fuzzy neighbour like "Verify - G+".
     keep_only = u.get("keep_only_names") or []
     if keep_only:
-        idxs: list[int] = []
-        for target in keep_only:
-            i = _resolve_in_prior(target, prior)
-            if i is not None and i not in idxs:
-                idxs.append(i)
-        if idxs:
-            keep = [prior[i] for i in idxs]
+        resolved = _resolve_keep_only(keep_only, prior)
+        if resolved:
+            keep = resolved
 
     # removes (may be several)
     for target in u.get("remove_names", []):
@@ -159,21 +158,30 @@ def _apply_refine(prior: list[dict], u: dict) -> list[dict]:
 
 
 def _add_queries(u: dict) -> list[str]:
-    out = []
-    if (aq := (u.get("add_query") or "").strip()):
-        out.append(aq)
-    out += [n for n in (u.get("add_names") or []) if n]
+    return [q.strip() for q in (u.get("add_queries") or []) if q and q.strip()]
+
+
+def _resolve_keep_only(names: list[str], prior: list[dict]) -> list[dict]:
+    """Resolve keep-only / set-list targets to catalog records. Positional refs use the
+    shown list; everything else resolves catalog-wide (curated aliases), so an explicitly
+    named item is honoured even if it wasn't in the prior shortlist."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for name in names:
+        idx = _positional_index(name, prior)
+        rec = prior[idx] if idx is not None else resolve_name(name)
+        if rec and rec["id"] not in seen:
+            seen.add(rec["id"])
+            out.append(rec)
     return out
 
 
 _POS_RE = re.compile(r"^#?\s*(\d{1,2})$|(?:item|number|option|#)\s*(\d{1,2})")
 
 
-def _resolve_in_prior(target: str, prior: list[dict]) -> int | None:
-    """Resolve 'the second one' / '#2' / a name to an index in the current shortlist.
-
-    Positional matching is strict (a bare "#N"/"item N"), so a name that merely contains
-    a number -- e.g. "Java 8 (New)" -- resolves by NAME, not to position 8."""
+def _positional_index(target: str, prior: list[dict]) -> int | None:
+    """Strict positional reference only ('the second one' / '#2' / 'last'). A name that
+    merely contains a number -- e.g. 'Java 8 (New)' -- is NOT treated as a position."""
     t = (target or "").strip().lower()
     if not t or not prior:
         return None
@@ -186,6 +194,13 @@ def _resolve_in_prior(target: str, prior: list[dict]) -> int | None:
         i = int(m.group(1) or m.group(2)) - 1
         if 0 <= i < len(prior):
             return i
+    return None
+
+
+def _resolve_in_prior(target: str, prior: list[dict]) -> int | None:
+    """Resolve a positional ref OR a name to an index in the current shortlist."""
+    if (idx := _positional_index(target, prior)) is not None:
+        return idx
     # exact/alias/global resolution first (unambiguous)
     rec = resolve_name(target)
     if rec:

@@ -9,7 +9,15 @@ from app.data.catalog import norm_url
 
 TRACES_DIR = os.path.join(os.path.dirname(__file__), "traces")
 _URL_RE = re.compile(r"<(https?://[^>]+)>")
-_USER_RE = re.compile(r"\*\*User\*\*\s*\n+>\s*(.+)")
+# A user turn is the full markdown blockquote after **User** -- one OR MORE ">" lines,
+# so multiline messages (e.g. C9's full job description) are captured completely.
+_USER_BLOCK_RE = re.compile(r"\*\*User\*\*\s*\n+((?:[ \t]*>.*(?:\n|$))+)")
+
+
+def _clean_block(block: str) -> str:
+    lines = [re.sub(r"^\s*>\s?", "", ln).rstrip()
+             for ln in block.splitlines() if ln.strip().startswith(">")]
+    return " ".join(l for l in lines if l).strip()
 
 
 def trace_files() -> list[str]:
@@ -21,7 +29,7 @@ def trace_files() -> list[str]:
 
 def parse_trace(path: str) -> dict:
     txt = open(path, encoding="utf-8").read()
-    user_turns = [u.strip() for u in _USER_RE.findall(txt)]
+    user_turns = [b for b in (_clean_block(m) for m in _USER_BLOCK_RE.findall(txt)) if b]
     # Gold = the final labeled shortlist = URLs in the last turn that lists any.
     turns = re.split(r"### Turn \d+", txt)
     gold: set[str] = set()

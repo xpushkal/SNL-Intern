@@ -51,6 +51,30 @@ def test_multiple_actions_remove_and_add():
     assert "P" in [t.test_type for t in r.recommendations]
 
 
+def test_add_multiple_products_retains_both():
+    base = run_turn([{"role": "user", "content": "hiring a cloud engineer"}])
+    r = run_turn([
+        {"role": "user", "content": "hiring a cloud engineer"},
+        {"role": "assistant", "content": base.reply},
+        {"role": "user", "content": "add AWS and Docker"},
+    ])
+    names = [x.name for x in r.recommendations]
+    assert any("AWS" in n for n in names) and any("Docker" in n for n in names)
+
+
+def test_multiple_actions_add_two_and_remove_one():
+    base = run_turn([{"role": "user", "content": "hiring a cloud engineer"}])
+    first = base.recommendations[0].name
+    r = run_turn([
+        {"role": "user", "content": "hiring a cloud engineer"},
+        {"role": "assistant", "content": base.reply},
+        {"role": "user", "content": "add AWS and Docker; drop the first one"},
+    ])
+    names = [x.name for x in r.recommendations]
+    assert any("AWS" in n for n in names) and any("Docker" in n for n in names)
+    assert first not in names
+
+
 def test_new_duration_constraint_applies_to_shortlist():
     from app.data.catalog import load_catalog
 

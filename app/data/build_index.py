@@ -23,14 +23,15 @@ from app.retrieval.text import tokenize
 
 
 def main() -> None:
-    from sentence_transformers import SentenceTransformer
     from rank_bm25 import BM25Okapi
+
+    from app.retrieval.embedding import load_embed_model
 
     catalog = load_catalog()
     docs = [doc_text(r) for r in catalog.records]
 
-    print(f"embedding {len(docs)} documents with {config.EMBED_MODEL} ...")
-    model = SentenceTransformer(config.EMBED_MODEL)
+    print(f"embedding {len(docs)} documents with {config.EMBED_MODEL}@{config.EMBED_REVISION} ...")
+    model = load_embed_model()  # pinned revision
     embeddings = model.encode(
         docs, normalize_embeddings=True, convert_to_numpy=True, show_progress_bar=False
     ).astype("float32")
