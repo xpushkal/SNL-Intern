@@ -30,9 +30,10 @@ POST /chat ──► FastAPI (strict schema, never-500) ──► LangGraph agen
 - **Reliability-first.** Every response is schema-valid; request-validation errors,
   agent exceptions, and timeouts all degrade to a valid 200 (no 4xx/5xx ever).
 - **Deterministic by default.** The agent clarifies, recommends, refines, compares, and
-  refuses fully deterministically — no LLM required. On the public traces this measured
-  *higher* Recall@10 (**0.575**) than the LLM route, at ~0.05s/turn. The Groq LLM is an
-  opt-in enhancement (`ENABLE_LLM=true`) for scope/routing robustness.
+  refuses fully deterministically — no LLM required. On the public traces this measures
+  Recall@10 **0.733** (scripted) / **0.700** (first-list) at ~0.05s/turn, higher than the
+  LLM route. The Groq LLM is an opt-in enhancement (`ENABLE_LLM=true`) for scope/routing
+  robustness.
 - **Hard constraints are inviolable.** Duration caps / required languages / required
   types filter; soft preferences only re-rank. The shortlist returns <10 rather than
   relax a hard constraint.
@@ -98,7 +99,7 @@ convenience surfaces; the graded API is `/health` + `/chat`.)
 ```bash
 python -m eval.replay     # multi-turn Recall@10 + latency + 6 behavior probes
 python -m eval.ablation   # BM25 vs dense vs hybrid vs +MMR Recall@10 table
-pytest -q                 # 22 unit/contract tests
+pytest -q                 # 70 unit/contract tests
 ```
 
 See [docs/APPROACH.md](docs/APPROACH.md) for the 2-page design write-up,

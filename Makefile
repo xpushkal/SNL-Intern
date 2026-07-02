@@ -29,4 +29,4 @@ deploy:          ## push a clean snapshot to the HF Space (see scripts/deploy_hf
 	bash scripts/deploy_hf.sh
 
 clean:
-	rm -rf artifacts/embeddings.npy artifacts/bm25.pkl __pycache__ */__pycache__ .pytest_cache
+	rm -rf artifacts/embeddings.npy artifacts/manifest.json __pycache__ */__pycache__ .pytest_cache

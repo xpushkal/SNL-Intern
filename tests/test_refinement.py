@@ -4,7 +4,9 @@ from app.agent.turn import run_turn
 
 def _java_base():
     base = run_turn([{"role": "user", "content": "hiring a java developer"}])
-    assert len(base.recommendations) == 10 and set(t.test_type for t in base.recommendations) == {"K"}
+    types = [t.test_type for t in base.recommendations]
+    # 9 role-specific Java tests + the flagship personality slot (battery coverage).
+    assert len(base.recommendations) == 10 and types.count("K") >= 8
     return base
 
 

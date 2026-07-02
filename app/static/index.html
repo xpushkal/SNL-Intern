@@ -62,7 +62,8 @@ function reset(){ history = []; chat.innerHTML =
   '<div class="hint">New conversation started.</div>'; input.focus(); }
 
 function el(cls, html){ const d=document.createElement("div"); d.className=cls; d.innerHTML=html; return d; }
-function esc(s){ return (s||"").replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function esc(s){ return (s||"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeUrl(u){ return /^https?:\/\//i.test(u||"") ? u : "#"; }
 
 function addMsg(role, text){
   chat.appendChild(el("msg "+role, '<div class="bubble">'+esc(text)+'</div>'));
@@ -73,7 +74,7 @@ function addRecs(recs){
   const wrap = el("recs","");
   recs.forEach((r,i)=> wrap.appendChild(el("rec",
     '<span class="badge">'+esc(r.test_type)+'</span>'+
-    '<a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.name)+'</a>')));
+    '<a href="'+esc(safeUrl(r.url))+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.name)+'</a>')));
   chat.appendChild(wrap); chat.scrollTop = chat.scrollHeight;
 }
 

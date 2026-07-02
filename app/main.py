@@ -77,6 +77,26 @@ async def chat(request: ChatRequest) -> ChatResponse:
         return safe_fallback_response()
 
 
+# --- Request-size guard (DoS): oversized bodies degrade to a schema-valid 200 ----
+@app.middleware("http")
+async def _body_size_guard(request: Request, call_next):
+    if request.method == "POST":
+        try:
+            length = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            length = config.MAX_BODY_BYTES + 1  # malformed header -> treat as oversized
+        if length > config.MAX_BODY_BYTES:
+            log.warning("rejected oversized request body (%s bytes)", length)
+            return JSONResponse(
+                status_code=200,
+                content=safe_fallback_response(
+                    "That message is too large for me to process. Could you send a "
+                    "shorter description of the role you're hiring for?"
+                ).model_dump(),
+            )
+    return await call_next(request)
+
+
 # --- Convert framework-level errors into schema-valid 200s ----------------
 @app.exception_handler(RequestValidationError)
 async def _on_validation_error(_req: Request, _exc: RequestValidationError) -> JSONResponse:

@@ -10,5 +10,8 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def tokenize(text: str) -> list[str]:
-    """Lowercase alphanumeric tokenization, shared by BM25 build and query."""
+    """Lowercase alphanumeric tokenization, shared by BM25 build and query.
+
+    Deliberately no stemming/plural folding: measured on the public traces it LOWERED
+    scripted-final Recall@10 (0.713 -> 0.693)."""
     return _TOKEN_RE.findall((text or "").lower())

@@ -36,7 +36,6 @@ RAW_CATALOG_PATH = Path(
 )
 NORMALIZED_PATH = ARTIFACTS_DIR / "catalog.normalized.json"
 EMBEDDINGS_PATH = ARTIFACTS_DIR / "embeddings.npy"
-BM25_PATH = ARTIFACTS_DIR / "bm25.pkl"
 ALIASES_PATH = ARTIFACTS_DIR / "aliases.json"
 MANIFEST_PATH = ARTIFACTS_DIR / "manifest.json"  # provenance for the built artifacts
 
@@ -57,6 +56,13 @@ EMBED_REVISION = os.getenv("EMBED_REVISION", "5c38ec7c405ec4b44b94cc5a9bb96e735b
 LLM_TIMEOUT_S = _num("LLM_TIMEOUT_S", 10.0)        # per LLM call
 TOTAL_TIMEOUT_S = _num("TOTAL_TIMEOUT_S", 25.0)    # whole-turn safety cap
 
+# --- Input bounds (DoS protection; generous enough to never touch real use) ----
+# Oversized input degrades to a schema-valid 200 (body cap) or is clamped (message
+# caps) so the never-4xx/5xx contract holds while CPU/memory stay bounded.
+MAX_BODY_BYTES = int(_num("MAX_BODY_BYTES", 2_000_000))     # /chat request body cap
+MAX_MESSAGES = int(_num("MAX_MESSAGES", 60))                # history length cap
+MAX_CONTENT_CHARS = int(_num("MAX_CONTENT_CHARS", 20_000))  # per-message content cap
+
 # --- Conversation policy -------------------------------------------------
 MAX_RECS = int(_num("MAX_RECS", 10))               # schema hard cap
 RECOMMEND_FILL = int(_num("RECOMMEND_FILL", 10))   # default shortlist size
@@ -66,7 +72,9 @@ TURN_HARD_CAP = int(_num("TURN_HARD_CAP", 8))      # evaluator message cap
 TURN_SOFT_LIMIT = int(_num("TURN_SOFT_LIMIT", 5))
 
 # --- Retrieval -----------------------------------------------------------
-RRF_K = int(_num("RRF_K", 60))                     # reciprocal-rank-fusion constant
+# Grid-searched on the public traces: 30-45 is a stable plateau at scripted-final
+# 0.733 / first-list 0.700 (vs 0.713/0.680 at the textbook 60); 40 = mid-plateau.
+RRF_K = int(_num("RRF_K", 40))                     # reciprocal-rank-fusion constant
 SOFT_BOOST = _num("SOFT_BOOST", 0.30)              # weight of soft-preference signals
 FUZZY_THRESHOLD = int(_num("FUZZY_THRESHOLD", 85)) # rapidfuzz name-match cutoff
 
@@ -84,6 +92,12 @@ SCOPE_MARGIN = _num("SCOPE_MARGIN", 0.06)     # how much out must beat in to ref
 # instrument with several report variants that often co-occur in gold shortlists).
 ENABLE_FAMILY_BOOST = _flag("ENABLE_FAMILY_BOOST", False)
 FAMILY_BOOST = _num("FAMILY_BOOST", 0.5)  # fraction of the family's best score
+
+# Battery-composition prior: a full recommend shortlist includes the flagship
+# personality instrument (OPQ32r) -- expert batteries pair role-specific tests with a
+# broad personality measure. Measured on the public traces: scripted-final Recall@10
+# 0.625 -> 0.699, stop-on-first 0.566 -> 0.680, probes 11/11, no trace regressed.
+ENABLE_BATTERY_COVERAGE = _flag("ENABLE_BATTERY_COVERAGE", True)
 
 # --- Feature flags (OFF until measured) ----------------------------------
 # LLM routing is OFF by default: on the public traces the deterministic core measured

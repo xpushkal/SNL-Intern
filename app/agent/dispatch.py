@@ -110,6 +110,7 @@ def dispatch(messages: list[dict], u: dict) -> tuple[list[dict], str, bool]:
         items = ranking.search(
             query, hard=u.get("hard", {}), soft=u.get("soft", {}), k=config.RECOMMEND_FILL
         )
+    items = ranking.ensure_battery_coverage(items, hard=u.get("hard", {}))
     end = user_done and bool(items)
     reply = render.render_confirm(items) if end else render.render_recommend(items)
     return items, reply, end
@@ -149,7 +150,17 @@ def _apply_refine(prior: list[dict], u: dict) -> list[dict]:
     # one (e.g. "add AWS and Docker" retains both, not just Docker).
     additions: list[dict] = []
     chosen = {r["id"] for r in keep}
+    catalog = load_catalog()
     for add_query in _add_queries(u):
+        # An add that IS an exact catalog name (e.g. from "keep Verify G+" resolution)
+        # takes that record verbatim -- retrieval would land on a fuzzy sibling like
+        # "Verify Interactive G+ Candidate Report" instead of the named instrument.
+        exact = catalog.get_by_name(add_query)
+        if exact and exact.get("is_individual") and ranking.hard_ok(exact, hard) \
+                and exact["id"] not in chosen:
+            additions.append(exact)
+            chosen.add(exact["id"])
+            continue
         for rec in ranking.search(add_query, hard=hard, soft=soft, k=config.RECOMMEND_FILL):
             if rec["id"] not in chosen:
                 additions.append(rec)

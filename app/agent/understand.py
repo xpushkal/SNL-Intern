@@ -207,6 +207,14 @@ def deterministic_understand(messages: list[dict]) -> dict:
         u["compare_names"] = _extract_compare_names(last)
         return u
 
+    # Informational question about the current shortlist ("do we really need X?",
+    # "is the Advanced level the right pick?") with no edit ops: answer by re-rendering
+    # the list unchanged. Rebuilding from scratch here would silently discard every
+    # accumulated edit (adds/removes) the user has made.
+    if has_prior_list and "?" in text and not any(p in text for p in _REFINE):
+        u["intent"] = "refine"  # no ops parsed -> no-op refine returns the prior list
+        return u
+
     refine_triggered = has_prior_list and (
         any(p in text for p in _REFINE)
         or _KEEP_CONFIRM_RE.search(text)
@@ -217,6 +225,8 @@ def deterministic_understand(messages: list[dict]) -> dict:
         u["intent"] = "refine"
         if not _KEEP_CONFIRM_RE.search(last):  # "keep the list as is" -> no-op (return prior)
             _parse_refine_ops(last, u)
+        else:
+            _parse_keep_named(last, messages, u)  # "keep Verify G+" w/ item absent -> add it
         return u
 
     if u["user_done"]:
@@ -326,6 +336,31 @@ def _parse_refine_ops(text: str, u: dict) -> None:
             adds.append(_clean_add(clause))
     u["remove_names"] = removes
     u["add_queries"] = [a for a in adds if a and a.lower() not in _VAGUE_ADD]
+
+
+# "keep <NAME>" where the name is not generic ("the list", "them", "it", ...).
+_KEEP_NAMED_RE = re.compile(
+    r"(?i)\b(?:keep|retain|stick with)\s+"
+    r"(?!the\b|it\b|them\b|those\b|only\b|just\b|everything\b|all\b|list\b|shortlist\b)"
+    r"(.+?)(?:[.,;]|$)")
+
+
+def _parse_keep_named(text: str, messages: list[dict], u: dict) -> None:
+    """A keep-confirmation that names a SPECIFIC catalog item ("Keep Verify G+") is an
+    instruction that the item belongs on the list -- if it is not already there, add it
+    (by canonical name, so retrieval lands on the exact instrument)."""
+    m = _KEEP_NAMED_RE.search(text)
+    if not m:
+        return
+    from app.retrieval.names import resolve_name
+
+    rec = resolve_name(m.group(1).strip(" .?!"))
+    if rec is None:
+        return  # generic phrase ("our audit stack") -> plain keep-confirm no-op
+    from app.agent.render import parse_prior_shortlist
+
+    if rec["id"] not in {r["id"] for r in parse_prior_shortlist(messages)}:
+        u["add_queries"] = [rec["name"]]
 
 
 def _has_prior_shortlist(messages: list[dict]) -> bool:

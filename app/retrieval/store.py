@@ -16,7 +16,6 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 import json
-import pickle
 import threading
 
 import numpy as np
@@ -86,19 +85,30 @@ _LOCK = threading.Lock()
 _INSTANCE: Retriever | None = None
 
 
+def _build_bm25(catalog: Catalog):
+    """Fit BM25 over the catalog docs at load time (deterministic, ~ms for 377 docs).
+
+    Rebuilding from the normalized catalog instead of unpickling a baked index removes
+    the pickle deserialization attack surface entirely (a tampered .pkl would execute
+    arbitrary code on load) and cannot drift from the catalog it is scored against."""
+    from rank_bm25 import BM25Okapi
+
+    from app.data.ingest import doc_text
+
+    return BM25Okapi([tokenize(doc_text(r)) for r in catalog.records])
+
+
 def load_retriever() -> Retriever:
     global _INSTANCE
     if _INSTANCE is None:
         with _LOCK:
             if _INSTANCE is None:
-                if not config.EMBEDDINGS_PATH.exists() or not config.BM25_PATH.exists():
+                if not config.EMBEDDINGS_PATH.exists():
                     raise FileNotFoundError(
                         "Retrieval artifacts missing. Run `python -m app.data.build_index`."
                     )
                 embeddings = np.load(config.EMBEDDINGS_PATH)
-                with open(config.BM25_PATH, "rb") as fh:
-                    bm25 = pickle.load(fh)
                 catalog = load_catalog()
                 _validate_manifest(embeddings, catalog)
-                _INSTANCE = Retriever(catalog, embeddings, bm25)
+                _INSTANCE = Retriever(catalog, embeddings, _build_bm25(catalog))
     return _INSTANCE

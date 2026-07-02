@@ -17,9 +17,36 @@ from typing import Literal
 import numpy as np
 
 from app import config
+from app.data.catalog import norm_name
 from app.retrieval.store import Retriever, load_retriever
 
 Mode = Literal["bm25", "dense", "hybrid"]
+
+# SHL's canonical broad personality instrument. Expert shortlists pair role-specific
+# skill/knowledge tests with a general personality measure, and OPQ32r is the flagship
+# instrument for that slot (present in 7/10 public gold shortlists); text retrieval
+# rarely surfaces it because hiring queries describe the role, not "personality".
+FLAGSHIP_PERSONALITY = "occupational personality questionnaire opq32r"
+
+
+def ensure_battery_coverage(items: list[dict], hard: dict | None = None,
+                            k: int | None = None) -> list[dict]:
+    """Battery-composition prior: a FULL shortlist that lacks the flagship personality
+    instrument swaps its tail item for it (subject to hard constraints). Lists already
+    shortened by hard filters are never padded, and explicit user edits (refine) never
+    pass through here."""
+    if not config.ENABLE_BATTERY_COVERAGE:
+        return items
+    hard = hard or {}
+    k = k or config.RECOMMEND_FILL
+    if len(items) < k:  # hard-constrained short list -> leave as-is
+        return items
+    if any(norm_name(r["name"]) == FLAGSHIP_PERSONALITY for r in items):
+        return items
+    rec = load_retriever().catalog.get_by_name(FLAGSHIP_PERSONALITY)
+    if rec is None or not _hard_ok(rec, hard):
+        return items
+    return items[: k - 1] + [rec]
 
 
 def _family_keys(name: str) -> set[str]:

@@ -13,7 +13,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Run as a non-root user (defense in depth: a compromised process cannot write
+# outside /app or install anything). UID 1000 matches HF Spaces' recommendation.
+RUN useradd --create-home --uid 1000 appuser && chown appuser:appuser /app
+COPY --chown=appuser:appuser . .
+USER appuser
 
 # Normalize the catalog, download the embedding model, and build the retrieval
 # artifacts at BUILD time so the running container needs no network.
