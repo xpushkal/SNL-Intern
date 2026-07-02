@@ -10,7 +10,13 @@ h1 + p, h2 + p { margin-top: 2pt; }
 p, li { margin: 3pt 0; }
 ul { margin: 3pt 0; padding-left: 16pt; }
 code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; font-size: 9pt; }
-table { border-collapse: collapse; font-size: 9pt; margin: 4pt 0; }
+table {
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 4pt 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
 th, td { border: 1px solid #bbb; padding: 2pt 6pt; text-align: left; }
 th { background: #f0f0f0; }
 strong { color: #000; }

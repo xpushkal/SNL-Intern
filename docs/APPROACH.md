@@ -1,5 +1,3 @@
-# Approach — Conversational SHL Assessment Recommender
-
 ## Problem & design stance
 Build a stateless `/chat` agent that moves a hiring manager from a vague intent to a
 grounded shortlist of SHL assessments — clarifying, recommending, refining, comparing,
@@ -80,6 +78,7 @@ a network-degraded sandbox) — inside the 30s cap either way.
 ## What didn't work / how I measured
 Every flag is off until a measured Recall@10 gain justifies it, and the reverse — every
 adopted change moved the replay number:
+
 - **Battery-composition prior (adopted):** reserving a full shortlist's tail slot for
   OPQ32r lifted scripted-final **0.625 → 0.699**; with the `RRF_K=40` retune and two
   state-preservation fixes (below) the config reaches **0.733**.
@@ -110,10 +109,11 @@ deserialization-of-untrusted-data surface); dependencies are pinned to CVE-clear
 versions; and the container runs as a non-root user.
 
 ## AI-tool usage
-Built with AI-assisted coding (Claude Code) for scaffolding, retrieval/agent plumbing,
-and the eval harness; all design decisions (hybrid-rank-all, hard/soft split,
-state-in-reply, flags-off-until-measured, model choice) are documented in
-`docs/DECISIONS.md` and were driven by the measurements above.
+Built with AI-assisted coding (Claude Code and OpenAI Codex) for scaffolding,
+retrieval/agent plumbing, the eval harness, deployment verification, and document
+polish; all design decisions (hybrid-rank-all, hard/soft split, state-in-reply,
+flags-off-until-measured, model choice) are documented in `docs/DECISIONS.md` and were
+driven by the measurements above.
 
 ## Stack
 `bge-small-en-v1.5` (local, baked) + BM25 retrieval · FastAPI + Pydantic v2 · LangGraph ·

@@ -34,7 +34,13 @@ h1 + p, h2 + p { margin-top: 2pt; }
 p, li { margin: 3pt 0; }
 ul { margin: 3pt 0; padding-left: 16pt; }
 code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; font-size: 9pt; }
-table { border-collapse: collapse; font-size: 9pt; margin: 4pt 0; }
+table {
+border-collapse: collapse;
+font-size: 9pt;
+margin: 4pt 0;
+break-inside: avoid;
+page-break-inside: avoid;
+}
 th, td { border: 1px solid #bbb; padding: 2pt 6pt; text-align: left; }
 th { background: #f0f0f0; }
 strong { color: #000; }
@@ -45,8 +51,6 @@ a { color: #1a1a1a; text-decoration: none; }
 <header id="title-block-header">
 <h1 class="title">SHL Assessment Recommender — Approach</h1>
 </header>
-<h1 id="approach-conversational-shl-assessment-recommender">Approach —
-Conversational SHL Assessment Recommender</h1>
 <h2 id="problem-design-stance">Problem &amp; design stance</h2>
 <p>Build a stateless <code>/chat</code> agent that moves a hiring
 manager from a vague intent to a grounded shortlist of SHL assessments —
@@ -159,34 +163,39 @@ the 30s cap either way.</p>
 <h2 id="what-didnt-work-how-i-measured">What didn’t work / how I
 measured</h2>
 <p>Every flag is off until a measured Recall@10 gain justifies it, and
-the reverse — every adopted change moved the replay number: -
-<strong>Battery-composition prior (adopted):</strong> reserving a full
-shortlist’s tail slot for OPQ32r lifted scripted-final <strong>0.625 →
-0.699</strong>; with the <code>RRF_K=40</code> retune and two
-state-preservation fixes (below) the config reaches
-<strong>0.733</strong>. - <strong>State-preservation fixes
-(adopted):</strong> a shortlist <em>question</em> (“do we really need
-Verify G+?”) was rebuilding the list from scratch and discarding
-accumulated edits — now it re-renders unchanged; and “keep <named item>”
-now adds that exact instrument when absent. Both recovered C9 gold (0.57
-→ 0.71). - <strong>Plural folding / light stemming (rejected):</strong>
+the reverse — every adopted change moved the replay number:</p>
+<ul>
+<li><strong>Battery-composition prior (adopted):</strong> reserving a
+full shortlist’s tail slot for OPQ32r lifted scripted-final
+<strong>0.625 → 0.699</strong>; with the <code>RRF_K=40</code> retune
+and two state-preservation fixes (below) the config reaches
+<strong>0.733</strong>.</li>
+<li><strong>State-preservation fixes (adopted):</strong> a shortlist
+<em>question</em> (“do we really need Verify G+?”) was rebuilding the
+list from scratch and discarding accumulated edits — now it re-renders
+unchanged; and “keep <named item>” now adds that exact instrument when
+absent. Both recovered C9 gold (0.57 → 0.71).</li>
+<li><strong>Plural folding / light stemming (rejected):</strong>
 <em>lowered</em> Recall@10 (0.713 → 0.693) — it collided distinct
-product tokens → left out. - <strong>MMR (rejected):</strong>
-<strong>no</strong> ablation gain (0.551 = 0.551) → left
-<strong>off</strong> (flagged). - <strong>Family/variant boost
-(rejected):</strong> <em>reduced</em> Recall@10 — a strong family
-displaces other-family gold → left <strong>off</strong>. - <strong>70B
-routing</strong> exhausted the Groq free-tier daily token budget (100k
-TPD) in a single replay and pushed p95 latency to ~10s → switched
-routing to <strong><code>llama-3.1-8b-instant</code></strong> (separate,
-larger budget; faster) and slashed prompt tokens. - <strong>LLM routing
-under-performed and is OFF by default.</strong> The deterministic
-broad-query core out-scores the 8B route (LLM query
+product tokens → left out.</li>
+<li><strong>MMR (rejected):</strong> <strong>no</strong> ablation gain
+(0.551 = 0.551) → left <strong>off</strong> (flagged).</li>
+<li><strong>Family/variant boost (rejected):</strong> <em>reduced</em>
+Recall@10 — a strong family displaces other-family gold → left
+<strong>off</strong>.</li>
+<li><strong>70B routing</strong> exhausted the Groq free-tier daily
+token budget (100k TPD) in a single replay and pushed p95 latency to
+~10s → switched routing to
+<strong><code>llama-3.1-8b-instant</code></strong> (separate, larger
+budget; faster) and slashed prompt tokens.</li>
+<li><strong>LLM routing under-performed and is OFF by default.</strong>
+The deterministic broad-query core out-scores the 8B route (LLM query
 <em>distillation</em> hurt multi-faceted/semantic needs like “senior
 Rust”, where gold items are inferred), at ~0.05s/turn vs ~9s and with no
 token/network risk. <code>ENABLE_LLM</code> defaults to false (same
 discipline as MMR/rerank); the LLM is one env var away for scope/routing
-robustness, and any LLM failure falls back to this same core.</p>
+robustness, and any LLM failure falls back to this same core.</li>
+</ul>
 <h2 id="reliability-robustness-hardening">Reliability &amp; robustness
 hardening</h2>
 <p>Beyond the never-4xx/5xx contract: request bodies are size-capped and
@@ -196,8 +205,9 @@ catalog at load rather than unpickled (no
 deserialization-of-untrusted-data surface); dependencies are pinned to
 CVE-clear versions; and the container runs as a non-root user.</p>
 <h2 id="ai-tool-usage">AI-tool usage</h2>
-<p>Built with AI-assisted coding (Claude Code) for scaffolding,
-retrieval/agent plumbing, and the eval harness; all design decisions
+<p>Built with AI-assisted coding (Claude Code and OpenAI Codex) for
+scaffolding, retrieval/agent plumbing, the eval harness, deployment
+verification, and document polish; all design decisions
 (hybrid-rank-all, hard/soft split, state-in-reply,
 flags-off-until-measured, model choice) are documented in
 <code>docs/DECISIONS.md</code> and were driven by the measurements
